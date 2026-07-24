@@ -53,3 +53,25 @@ export const auth = (...requiredRoles: Role[]) => {
     next();
   });
 };
+
+export const optionalAuth = catchAsync(
+  async (req: Request, _res: Response, next: NextFunction) => {
+    const token =
+      req.cookies?.accessToken ||
+      req.headers.authorization?.replace(/^Bearer\s+/i, "");
+
+    if (!token) {
+      next();
+      return;
+    }
+
+    const verifiedToken = jwtUtils.verifyToken(token, config.jwt_access_secret);
+    if (!verifiedToken.success) {
+      throw new ApiError(httpStatus.UNAUTHORIZED, verifiedToken.error);
+    }
+
+    const { id, name, email, role } = verifiedToken.data as JwtPayload;
+    req.user = { id, name, email, role };
+    next();
+  },
+);

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authLimiter } from "../../middlewares/rateLimiter";
+import { auth } from "../../middlewares/auth";
 import { validateRequest } from "../../middlewares/validateRequest";
 import { authController } from "./auth.controller";
 import { loginValidationSchema, registerValidationSchema } from "./auth.validation";
@@ -10,8 +11,8 @@ const router = Router();
  * @openapi
  * /api/auth/register:
  *   post:
- *     summary: Register a new admin
- *     description: Creates a new admin account. Email must be unique.
+ *     summary: Register a citizen account
+ *     description: Creates a citizen account with the user role. Administrative roles cannot be self-assigned.
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -19,12 +20,11 @@ const router = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, email, password, role]
+ *             required: [name, email, password]
  *             properties:
  *               name: { type: string, example: "Dipjit Baroi" }
  *               email: { type: string, format: email, example: "admin@crisisdesk.ai" }
- *               password: { type: string, minLength: 6, example: "supersecret123" }
- *               role: { type: string, enum: ["user", "admin"], example: "admin" }
+ *               password: { type: string, minLength: 8, example: "securepass123" }
  *     responses:
  *       201:
  *         description: Created
@@ -40,7 +40,7 @@ const router = Router();
  *                 id: "8d2e4f12-3a4b-4c1d-9e0f-7b8a9c0d1e2f"
  *                 name: "Dipjit Baroi"
  *                 email: "admin@crisisdesk.ai"
- *                 role: "admin"
+ *                 role: "user"
  *                 createdAt: "2026-07-13T09:00:00.000Z"
  *       400:
  *         description: Validation error
@@ -68,10 +68,11 @@ router.post("/register", validateRequest(registerValidationSchema), authControll
  * @openapi
  * /api/auth/login:
  *   post:
- *     summary: Admin login
+ *     summary: Sign in
  *     description: |
  *       Authenticates an admin and returns a JWT access token (also set as an
- *       HTTP-only `accessToken` cookie). Only `role=admin` users can log in.
+ *       HTTP-only `accessToken` cookie). The response includes the authenticated
+ *       user so clients can route users according to their role.
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -100,6 +101,11 @@ router.post("/register", validateRequest(registerValidationSchema), authControll
  *               message: "Login successful"
  *               data:
  *                 accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *                 user:
+ *                   id: "8d2e4f12-3a4b-4c1d-9e0f-7b8a9c0d1e2f"
+ *                   name: "Dipjit Baroi"
+ *                   email: "admin@crisisdesk.ai"
+ *                   role: "admin"
  *       400:
  *         description: Validation error
  *         content:
@@ -129,5 +135,7 @@ router.post("/register", validateRequest(registerValidationSchema), authControll
  *               message: "Too many login attempts. Please try again later."
  */
 router.post("/login", authLimiter, validateRequest(loginValidationSchema), authController.loginUser);
+router.get("/me", auth(), authController.getCurrentUser);
+router.post("/logout", authController.logoutUser);
 
 export const authRoutes = router;

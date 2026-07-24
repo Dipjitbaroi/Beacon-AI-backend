@@ -7,7 +7,7 @@ import { jwtUtils } from "../../utils/jwt";
 import { ILoginUser, IRegisterUser } from "./auth.interface";
 
 const registerUser = async (payload: IRegisterUser) => {
-  const { name, email, password, role } = payload;
+  const { name, email, password } = payload;
 
   const existingUser = await prisma.user.findUnique({
     where: { email },
@@ -30,7 +30,7 @@ const registerUser = async (payload: IRegisterUser) => {
       name,
       email,
       password: hashedPassword,
-      role,
+      role: "user",
     },
     select: {
       id: true,
@@ -55,13 +55,6 @@ const loginUser = async (payload: ILoginUser) => {
     throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid email or password");
   }
 
-  if (user.role !== "admin") {
-    throw new ApiError(
-      httpStatus.UNAUTHORIZED,
-      "Access denied. Only admins can log in."
-    );
-  }
-
   const isPasswordMatched = await bcrypt.compare(password, user.password);
 
   if (!isPasswordMatched) {
@@ -81,7 +74,15 @@ const loginUser = async (payload: ILoginUser) => {
     config.jwt_access_expires_in,
   );
 
-  return { accessToken };
+  return {
+    accessToken,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    },
+  };
 };
 
 export const authService = {

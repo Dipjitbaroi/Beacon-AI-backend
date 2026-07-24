@@ -1,0 +1,2 @@
+ALTER TABLE "reports"
+ADD COLUMN "evidenceUrls" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

@@ -33,6 +33,37 @@ vi.mock("../../../modules/report/report.service", () => ({
 import { reportService } from "../../../modules/report/report.service";
 
 describe("POST /api/reports", () => {
+  it("normalizes valid report input and returns both public identifiers", async () => {
+    vi.mocked(reportService.createReport).mockResolvedValueOnce({
+      id: "report-1",
+      trackingCode: "CIV-ABC123",
+    } as any);
+
+    const res = await request(app).post("/api/reports").send({
+      description: "  Large pothole outside the school gate  ",
+      locationText: "  Mirpur-10, Dhaka  ",
+      latitude: "23.8067",
+      longitude: "90.3687",
+      imageUrls: ["https://res.cloudinary.com/demo/image/upload/report.jpg"],
+      evidenceUrls: ["https://example.com/video"],
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({
+      id: "report-1",
+      trackingCode: "CIV-ABC123",
+    });
+    expect(reportService.createReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: "Large pothole outside the school gate",
+        locationText: "Mirpur-10, Dhaka",
+        latitude: 23.8067,
+        longitude: 90.3687,
+        evidenceUrls: ["https://example.com/video"],
+      }),
+    );
+  });
+
   it("should return 400 if description is missing", async () => {
     const res = await request(app)
       .post("/api/reports")
@@ -80,6 +111,37 @@ describe("POST /api/reports", () => {
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
   });
+
+  it("should reject latitude outside its geographic range", async () => {
+    const res = await request(app).post("/api/reports").send({
+      description: "Large pothole on the main road",
+      locationText: "Mirpur-10, Dhaka",
+      latitude: 91,
+      longitude: 90.3687,
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("should require latitude and longitude together", async () => {
+    const res = await request(app).post("/api/reports").send({
+      description: "Large pothole on the main road",
+      locationText: "Mirpur-10, Dhaka",
+      latitude: 23.8067,
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("should reject non-http evidence URLs", async () => {
+    const res = await request(app).post("/api/reports").send({
+      description: "Large pothole on the main road",
+      locationText: "Mirpur-10, Dhaka",
+      evidenceUrls: ["javascript:alert(1)"],
+    });
+
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("GET /api/reports/track/:trackingCode", () => {
@@ -118,9 +180,9 @@ describe("GET /api/reports", () => {
   });
 });
 
-describe("GET /api/reports/stats", () => {
+describe("GET /api/reports/stats/summary", () => {
   it("should require admin authentication", async () => {
-    const res = await request(app).get("/api/reports/stats");
+    const res = await request(app).get("/api/reports/stats/summary");
 
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);

@@ -26,15 +26,18 @@ function getClient(): OpenAI {
 export const generateEmbedding = async (text: string): Promise<number[]> => {
   if (!text || !text.trim()) return [];
 
-  const trimmed = text.slice(0, 8000); // safety clamp
-  const client = getClient();
-
-  const res = await client.embeddings.create({
-    model: config.openai_embedding_model,
-    input: trimmed,
-  });
-
-  return res.data[0]?.embedding ?? [];
+  try {
+    const trimmed = text.slice(0, 8000); // safety clamp
+    const client = getClient();
+    const res = await client.embeddings.create({
+      model: config.openai_embedding_model,
+      input: trimmed,
+    });
+    return res.data[0]?.embedding ?? [];
+  } catch (error) {
+    console.error("[openai] embedding unavailable; duplicate detection will use non-semantic signals:", (error as Error).message);
+    return [];
+  }
 };
 
 export const cosineSimilarity = (a: number[], b: number[]): number => {

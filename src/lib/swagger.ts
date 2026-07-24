@@ -185,6 +185,10 @@ const options: swaggerJSDoc.Options = {
               type: "array",
               items: { type: "string", format: "uri" },
             },
+            evidenceUrls: {
+              type: "array",
+              items: { type: "string", format: "uri" },
+            },
             duplicateOfId: { type: "string", format: "uuid", nullable: true },
             duplicateScore: { type: "number", format: "float", nullable: true },
             status: {
@@ -314,6 +318,10 @@ const options: swaggerJSDoc.Options = {
               enum: ["en", "bn", "es", "fr", "ar", "unknown"],
             },
             images: {
+              type: "array",
+              items: { type: "string", format: "uri" },
+            },
+            evidenceUrls: {
               type: "array",
               items: { type: "string", format: "uri" },
             },

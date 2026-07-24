@@ -49,6 +49,7 @@ const REPORT_LIST_SELECT = {
   canonicalSummary: true,
   language: true,
   imageUrls: true,
+  evidenceUrls: true,
   status: true,
   assignedDepartment: true,
   duplicateOfId: true,
@@ -72,6 +73,7 @@ async function generateUniqueTrackingCode(): Promise<string> {
 
 const createReport = async (payload: ICreateReport) => {
   const {
+    citizenId,
     citizenName,
     contact,
     description,
@@ -79,19 +81,21 @@ const createReport = async (payload: ICreateReport) => {
     latitude,
     longitude,
     imageUrls = [],
+    evidenceUrls = [],
     language = "unknown",
     category: citizenCategory,
   } = payload;
 
   // Step 1: AI triage
-  const triage = await runTriage({ description, locationText });
+  const triage = await runTriage({
+    description,
+    locationText,
+    citizenCategory,
+    imageUrls,
+  });
 
-  // Citizens can pre-classify; trust them if confidence is high enough,
-  // otherwise use the AI category. The AI category is always stored.
-  const finalCategory =
-    citizenCategory && triage.aiConfidence < 0.7
-      ? citizenCategory
-      : (triage.category as any);
+  // The citizen selection is a hint only. AI owns the operational category.
+  const finalCategory = triage.category;
 
   // Step 2: Embed the canonical English text
   const embeddingInput = `${triage.canonicalSummary} | ${locationText}`;
@@ -178,6 +182,7 @@ const createReport = async (payload: ICreateReport) => {
     const created = await tx.report.create({
       data: {
         trackingCode,
+        citizenId: citizenId ?? null,
         citizenName: citizenName ?? null,
         contact: contact ?? null,
         description,
@@ -185,6 +190,7 @@ const createReport = async (payload: ICreateReport) => {
         latitude: latitude ?? null,
         longitude: longitude ?? null,
         category: finalCategory as any,
+        citizenCategory: citizenCategory ?? null,
         aiCategory: triage.category as any,
         severityLevel: triage.severityLevel as any,
         severityScore: triage.severityScore,
@@ -197,6 +203,7 @@ const createReport = async (payload: ICreateReport) => {
         normalizedLocation: locationText,
         embedding,
         imageUrls,
+        evidenceUrls,
         status: "pending",
         assignedDepartment: triage.suggestedDepartment as any,
         duplicateOfId,
@@ -235,7 +242,7 @@ const getAllReports = async (filters: IReportFilters) => {
     sortOrder = "desc",
   } = filters;
 
-  const where: Prisma.ReportWhereInput = {};
+  const where: Prisma.ReportWhereInput = { deletedAt: null };
 
   if (category) where.category = category;
   if (severityLevel) where.severityLevel = severityLevel;
@@ -244,6 +251,8 @@ const getAllReports = async (filters: IReportFilters) => {
 
   if (search) {
     where.OR = [
+      { id: { contains: search, mode: "insensitive" } },
+      { trackingCode: { contains: search, mode: "insensitive" } },
       { description: { contains: search, mode: "insensitive" } },
       { locationText: { contains: search, mode: "insensitive" } },
       { canonicalSummary: { contains: search, mode: "insensitive" } },
@@ -279,14 +288,137 @@ const getAllReports = async (filters: IReportFilters) => {
   };
 };
 
+const getCitizenReports = async (citizenId: string) => {
+  return prisma.report.findMany({
+    where: { citizenId, deletedAt: null },
+    select: REPORT_LIST_SELECT,
+    orderBy: { createdAt: "desc" },
+  });
+};
+
+const getPublicMapReports = async () => {
+  const reports = await prisma.report.findMany({
+    where: {
+      deletedAt: null,
+      latitude: { not: null },
+      longitude: { not: null },
+      status: { not: "rejected" },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 500,
+    select: {
+      trackingCode: true,
+      latitude: true,
+      longitude: true,
+      category: true,
+      severityLevel: true,
+      severityScore: true,
+      status: true,
+      summary: true,
+      createdAt: true,
+    },
+  });
+
+  return reports;
+};
+
+const getPublicLandingData = async () => {
+  const baseWhere: Prisma.ReportWhereInput = { deletedAt: null };
+  const [totalReports, resolvedReports, activeReports, mappedReports, resolved] =
+    await Promise.all([
+      prisma.report.count({ where: baseWhere }),
+      prisma.report.count({ where: { ...baseWhere, status: "resolved" } }),
+      prisma.report.count({
+        where: {
+          ...baseWhere,
+          status: { in: ["pending", "under_review", "assigned", "in_progress"] },
+        },
+      }),
+      prisma.report.count({
+        where: {
+          ...baseWhere,
+          latitude: { not: null },
+          longitude: { not: null },
+        },
+      }),
+      prisma.report.findMany({
+        where: { ...baseWhere, status: "resolved" },
+        orderBy: { updatedAt: "desc" },
+        take: 20,
+        select: {
+          trackingCode: true,
+          category: true,
+          locationText: true,
+          summary: true,
+          assignedDepartment: true,
+          createdAt: true,
+          progressUpdates: {
+            where: { status: "resolved", visibility: "public" },
+            orderBy: { createdAt: "asc" },
+            take: 1,
+            select: { createdAt: true },
+          },
+        },
+      }),
+    ]);
+
+  const resolvedWithDuration = resolved
+    .map((report) => {
+      const resolvedAt = report.progressUpdates[0]?.createdAt;
+      if (!resolvedAt) return null;
+      return {
+        trackingCode: report.trackingCode,
+        category: report.category,
+        locationText: report.locationText,
+        summary: report.summary,
+        assignedDepartment: report.assignedDepartment,
+        createdAt: report.createdAt,
+        resolvedAt,
+        resolutionHours: Number(
+          ((resolvedAt.getTime() - report.createdAt.getTime()) / 3_600_000).toFixed(2),
+        ),
+      };
+    })
+    .filter((report): report is NonNullable<typeof report> => report !== null);
+
+  const averageResolutionTimeHours = resolvedWithDuration.length
+    ? Number(
+        (
+          resolvedWithDuration.reduce((total, report) => total + report.resolutionHours, 0) /
+          resolvedWithDuration.length
+        ).toFixed(2),
+      )
+    : null;
+
+  return {
+    totalReports,
+    resolvedReports,
+    activeReports,
+    mappedReports,
+    averageResolutionTimeHours,
+    recentResolutions: resolvedWithDuration.slice(0, 3),
+  };
+};
+
 const getReportById = async (id: string) => {
   const report = await prisma.report.findUnique({
     where: { id },
     select: {
       ...REPORT_LIST_SELECT,
+      citizenId: true,
+      citizenCategory: true,
+      normalizedLocation: true,
+      aiConfidence: true,
       severityRationale: true,
+      suggestedAction: true,
+      citizen: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
       progressUpdates: {
-        where: { visibility: "public" },
         orderBy: { createdAt: "desc" },
         select: {
           id: true,
@@ -294,12 +426,28 @@ const getReportById = async (id: string) => {
           note: true,
           visibility: true,
           createdAt: true,
+          updatedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+      duplicateParent: {
+        select: {
+          id: true,
+          trackingCode: true,
+          summary: true,
+          status: true,
         },
       },
       duplicateChildren: {
         select: {
           id: true,
           trackingCode: true,
+          summary: true,
           createdAt: true,
           severityLevel: true,
           status: true,
@@ -312,11 +460,15 @@ const getReportById = async (id: string) => {
   return report;
 };
 
-const trackReport = async (trackingCode: string, includeInternal = false) => {
+const trackReport = async (trackingCode: string) => {
   const report = await prisma.report.findUnique({
     where: { trackingCode },
     select: {
       trackingCode: true,
+      description: true,
+      locationText: true,
+      latitude: true,
+      longitude: true,
       category: true,
       canonicalSummary: true,
       severityLevel: true,
@@ -326,9 +478,12 @@ const trackReport = async (trackingCode: string, includeInternal = false) => {
       assignedDepartment: true,
       language: true,
       imageUrls: true,
+      evidenceUrls: true,
+      suggestedAction: true,
       createdAt: true,
+      updatedAt: true,
       progressUpdates: {
-        where: includeInternal ? {} : { visibility: "public" },
+        where: { visibility: "public" },
         orderBy: { createdAt: "desc" },
         select: {
           id: true,
@@ -345,7 +500,12 @@ const trackReport = async (trackingCode: string, includeInternal = false) => {
 
   // Strip any internal/duplicate bookkeeping fields that may have leaked.
   return {
+    reportId: report.trackingCode,
     trackingCode: report.trackingCode,
+    description: report.description,
+    locationText: report.locationText,
+    latitude: report.latitude,
+    longitude: report.longitude,
     category: report.category,
     summary: report.canonicalSummary,
     severity: {
@@ -357,7 +517,10 @@ const trackReport = async (trackingCode: string, includeInternal = false) => {
     department: report.assignedDepartment,
     language: report.language,
     images: report.imageUrls,
+    evidenceUrls: report.evidenceUrls,
+    suggestedAction: report.suggestedAction,
     createdAt: report.createdAt,
+    updatedAt: report.updatedAt,
     progress: report.progressUpdates,
   };
 };
@@ -584,7 +747,7 @@ const getStatsSummary = async (filters: IStatsSummaryFilters = {}) => {
   // Build the shared base WHERE clause. Every count / groupBy / findMany
   // below starts from this so the breakdown numbers always agree with the
   // top-level totals.
-  const baseWhere: Prisma.ReportWhereInput = {};
+  const baseWhere: Prisma.ReportWhereInput = { deletedAt: null };
 
   if (location && location.length > 0) {
     baseWhere.OR = [
@@ -650,7 +813,7 @@ const getStatsSummary = async (filters: IStatsSummaryFilters = {}) => {
   // calendar day in UTC; the date range filter narrows the window only
   // if the user explicitly supplies startDate / endDate, otherwise we
   // show the trailing 7 days.
-  const last7Days: { date: string; count: number }[] = [];
+  const last7Days: { date: string; count: number; resolved: number }[] = [];
   const now = new Date();
   // If the caller supplied an endDate, anchor the trailing window to
   // that day; otherwise anchor to "today".
@@ -678,14 +841,24 @@ const getStatsSummary = async (filters: IStatsSummaryFilters = {}) => {
 
     // If the caller supplied a startDate, skip days before it.
     if (startDate && day < new Date(startDate)) {
-      last7Days.push({ date: day.toISOString().slice(0, 10), count: 0 });
+      last7Days.push({ date: day.toISOString().slice(0, 10), count: 0, resolved: 0 });
       continue;
     }
 
-    const c = await prisma.report.count({ where: dayCountWhere });
+    const [c, resolved] = await Promise.all([
+      prisma.report.count({ where: dayCountWhere }),
+      prisma.report.count({
+        where: {
+          ...baseWhere,
+          status: "resolved",
+          updatedAt: { gte: day, lt: next },
+        },
+      }),
+    ]);
     last7Days.push({
       date: day.toISOString().slice(0, 10),
       count: c,
+      resolved,
     });
   }
 
@@ -748,6 +921,9 @@ const getStatsSummary = async (filters: IStatsSummaryFilters = {}) => {
 
 export const reportService = {
   createReport,
+  getCitizenReports,
+  getPublicMapReports,
+  getPublicLandingData,
   getAllReports,
   getReportById,
   trackReport,

@@ -7,6 +7,7 @@ import {
 } from "../../../generated/prisma/enums";
 
 export interface ICreateReport {
+  citizenId?: string;
   citizenName?: string;
   contact?: string;
   description: string;
@@ -14,6 +15,7 @@ export interface ICreateReport {
   latitude?: number;
   longitude?: number;
   imageUrls?: string[];
+  evidenceUrls?: string[];
   language?: Language;
   category?: ReportCategory;
 }

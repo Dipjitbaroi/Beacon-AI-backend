@@ -13,12 +13,53 @@ import {
 
 const createReport = catchAsync(
   async (req: Request, res: Response, _next: NextFunction) => {
-    const report = await reportService.createReport(req.body);
+    const report = await reportService.createReport({
+      ...req.body,
+      citizenId: req.user?.role === "user" ? req.user.id : undefined,
+      citizenName: req.body.citizenName ?? (req.user?.role === "user" ? req.user.name : undefined),
+      contact: req.body.contact ?? (req.user?.role === "user" ? req.user.email : undefined),
+    });
     sendResponse(res, {
       success: true,
       statusCode: httpStatus.CREATED,
       message: "Report submitted successfully",
       data: report,
+    });
+  },
+);
+
+const getMyReports = catchAsync(
+  async (req: Request, res: Response, _next: NextFunction) => {
+    const reports = await reportService.getCitizenReports(req.user!.id);
+    sendResponse(res, {
+      success: true,
+      statusCode: httpStatus.OK,
+      message: "Your reports retrieved successfully",
+      data: reports,
+    });
+  },
+);
+
+const getPublicMapReports = catchAsync(
+  async (_req: Request, res: Response, _next: NextFunction) => {
+    const reports = await reportService.getPublicMapReports();
+    sendResponse(res, {
+      success: true,
+      statusCode: httpStatus.OK,
+      message: "Public map reports retrieved successfully",
+      data: reports,
+    });
+  },
+);
+
+const getPublicLandingData = catchAsync(
+  async (_req: Request, res: Response, _next: NextFunction) => {
+    const data = await reportService.getPublicLandingData();
+    sendResponse(res, {
+      success: true,
+      statusCode: httpStatus.OK,
+      message: "Public landing data retrieved successfully",
+      data,
     });
   },
 );
@@ -71,9 +112,7 @@ const getReportById = catchAsync(
 const trackReport = catchAsync(
   async (req: Request, res: Response, _next: NextFunction) => {
     const code = normalizeTrackingCode(req.params.trackingCode as string);
-    const includeInternal = req.query.includeInternal === "true";
-
-    const report = await reportService.trackReport(code, includeInternal);
+    const report = await reportService.trackReport(code);
 
     sendResponse(res, {
       success: true,
@@ -187,6 +226,9 @@ const getReportDuplicates = catchAsync(
 
 export const reportController = {
   createReport,
+  getMyReports,
+  getPublicMapReports,
+  getPublicLandingData,
   getAllReports,
   getReportById,
   trackReport,

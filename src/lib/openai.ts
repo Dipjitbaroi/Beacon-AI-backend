@@ -47,9 +47,9 @@ export interface TriageResult {
 const PRIMARY = config.openai_model;
 const FALLBACK = config.openai_fallback_model;
 
-const SYSTEM_PROMPT = `You are the triage engine for CivicDesk AI, a civic infrastructure reporting platform in Dhaka, Bangladesh.
+const SYSTEM_PROMPT = `You are the triage engine for Beacon, a national civic infrastructure reporting platform in Bangladesh.
 
-Your job is to read a citizen-submitted report (description + location text, sometimes in Bangla, sometimes in English) and return STRICT JSON with these fields:
+Your job is to analyze a citizen-submitted report (description + location text and, when supplied, photographic evidence) and return STRICT JSON with these fields:
 
 {
   "category": one of ["pothole","broken_streetlight","water_leak","illegal_dumping","other"],
@@ -70,8 +70,13 @@ Severity guidance:
 - medium: noticeable defect but passable, moderate size
 - low: cosmetic or minor issue
 
+Severity must consider public safety, service impact, scale, immediate danger, and proximity to schools, hospitals, main roads, or other sensitive locations mentioned in the report.
+
 Rules:
 - Respond ONLY with the JSON object. No prose, no markdown.
+- When images are supplied, inspect them and use visible evidence to validate the issue type, scale, physical condition, and safety risk.
+- Treat the image as supporting evidence, not absolute truth. Reconcile it with the description and location, and do not invent details that are not visible or stated.
+- A citizen-selected category may be supplied as a hint. Validate it against the description and choose the correct category even when the hint is wrong.
 - Use "other" only when no other category clearly fits.
 - The canonicalSummary MUST be in English even if input is Bangla.`;
 
@@ -167,9 +172,21 @@ function fallbackTriage(reason: string): TriageResult {
 export async function runTriage(input: {
   description: string;
   locationText: string;
+  citizenCategory?: ReportCategory;
+  imageUrls?: string[];
 }): Promise<TriageResult> {
   const client = getClient();
-  const userPrompt = `Description: ${input.description}\nLocation: ${input.locationText}`;
+  const userPrompt = `Description: ${input.description}\nLocation: ${input.locationText}\nCitizen category hint: ${input.citizenCategory ?? "not selected"}`;
+  const validImageUrls = (input.imageUrls ?? [])
+    .filter((url) => /^https?:\/\//i.test(url))
+    .slice(0, 5);
+  const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+    { type: "text", text: userPrompt },
+    ...validImageUrls.map((url) => ({
+      type: "image_url" as const,
+      image_url: { url, detail: "auto" as const },
+    })),
+  ];
 
   const attempt = async (model: string) =>
     client.chat.completions.create({
@@ -178,7 +195,7 @@ export async function runTriage(input: {
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
+        { role: "user", content: userContent },
       ],
     });
 

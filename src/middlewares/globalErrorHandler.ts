@@ -24,7 +24,7 @@ export const globalErrorHandler = (err: any, _req: Request, res: Response, _next
 
     if (
       missingFieldNames.length > 0 &&
-      missingFieldNames.every((name) => ["description", "location"].includes(name))
+      missingFieldNames.every((name) => ["description", "locationText"].includes(name))
     ) {
       errorMessage = "Description and location are required.";
     } else {

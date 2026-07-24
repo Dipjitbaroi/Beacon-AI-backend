@@ -161,6 +161,27 @@ describe("reportService", () => {
       expect(mockCreate).toHaveBeenCalled();
     });
 
+    it("forwards uploaded images to AI triage", async () => {
+      const { runTriage } = await import("../../../../lib/openai");
+      mockFindMany.mockResolvedValue([]);
+      mockCreate.mockResolvedValue({
+        id: "report-with-image",
+        trackingCode: "CIV-IMAGE1",
+        category: "pothole",
+        imageUrls: ["https://cdn.example.com/pothole.jpg"],
+        embedding: [],
+      } as any);
+
+      await reportService.createReport({
+        ...basePayload,
+        imageUrls: ["https://cdn.example.com/pothole.jpg"],
+      });
+
+      expect(runTriage).toHaveBeenCalledWith(expect.objectContaining({
+        imageUrls: ["https://cdn.example.com/pothole.jpg"],
+      }));
+    });
+
     it("links to a duplicate when score exceeds threshold", async () => {
       const { cosineSimilarity } = await import("../../../../lib/embedding");
       vi.mocked(cosineSimilarity).mockReturnValue(0.95);
@@ -394,6 +415,10 @@ describe("reportService", () => {
       const mockReport = {
         id: "r1",
         trackingCode: "PV9K-3X7Q",
+        description: "A large pothole is blocking the traffic lane.",
+        locationText: "Mirpur-10, Dhaka",
+        latitude: 23.8067,
+        longitude: 90.3687,
         category: "pothole",
         canonicalSummary: "Large pothole near Mirpur-10 bus stop",
         severityLevel: "high",
@@ -403,8 +428,11 @@ describe("reportService", () => {
         assignedDepartment: "roads_and_highways",
         language: "en",
         imageUrls: [],
-        progress: [],
+        evidenceUrls: [],
+        suggestedAction: "Inspect and repair the road surface.",
+        progressUpdates: [],
         createdAt: new Date(),
+        updatedAt: new Date(),
       };
       mockFindUnique.mockResolvedValue(mockReport as any);
 
@@ -412,9 +440,13 @@ describe("reportService", () => {
 
       expect(result.trackingCode).toBe("PV9K-3X7Q");
       expect(result).not.toHaveProperty("id");
-      expect(result).not.toHaveProperty("latitude");
-      expect(result).not.toHaveProperty("longitude");
-      expect(result).not.toHaveProperty("description");
+      expect(result).not.toHaveProperty("contact");
+      expect(result).not.toHaveProperty("citizenName");
+      expect(result).toMatchObject({
+        reportId: "PV9K-3X7Q",
+        description: "A large pothole is blocking the traffic lane.",
+        locationText: "Mirpur-10, Dhaka",
+      });
       expect(mockFindUnique).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { trackingCode: "PV9K-3X7Q" },

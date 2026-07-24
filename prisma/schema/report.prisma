@@ -2,12 +2,15 @@ model Report {
   id                 String          @id @default(uuid())
   trackingCode       String          @unique
   citizenName        String?         @db.VarChar(255)
+  citizenId          String?
+  citizen            User?           @relation(fields: [citizenId], references: [id], onDelete: SetNull)
   contact            String?         @db.VarChar(255)
   description        String
   locationText       String
   latitude           Float?
   longitude          Float?
   category           ReportCategory
+  citizenCategory    ReportCategory?
   aiCategory         ReportCategory?
   severityLevel      SeverityLevel?
   severityScore      Float?
@@ -19,6 +22,7 @@ model Report {
   aiConfidence       Float?
   embedding          Float[]
   imageUrls          String[]
+  evidenceUrls       String[]         @default([])
   status             ReportStatus    @default(pending)
   assignedDepartment Department?
   duplicateOfId      String?
@@ -37,6 +41,7 @@ model Report {
   @@index([assignedDepartment])
   @@index([createdAt])
   @@index([trackingCode])
+  @@index([citizenId, createdAt])
   @@index([deletedAt])
   @@map("reports")
 }

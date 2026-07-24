@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { auth } from "../../middlewares/auth";
+import { auth, optionalAuth } from "../../middlewares/auth";
 import { reportSubmitLimiter } from "../../middlewares/rateLimiter";
 import { validateRequest } from "../../middlewares/validateRequest";
 import { Role } from "../../../generated/prisma/enums";
@@ -93,9 +93,6 @@ router.get(
  *         name: trackingCode
  *         required: true
  *         schema: { type: string, example: "CIV-3K9P7X" }
- *       - in: query
- *         name: includeInternal
- *         schema: { type: boolean, default: false }
  *     responses:
  *       200:
  *         description: OK
@@ -108,6 +105,7 @@ router.get(
  *               statusCode: 200
  *               message: "Tracking info retrieved"
  *               data:
+ *                 reportId: "CIV-3K9P7X"
  *                 trackingCode: "CIV-3K9P7X"
  *                 category: "pothole"
  *                 summary: "Large pothole near Mirpur-10 bus stop."
@@ -140,6 +138,10 @@ router.get(
   reportController.trackReport,
 );
 
+router.get("/public/map", reportController.getPublicMapReports);
+router.get("/public/landing", reportController.getPublicLandingData);
+router.get("/mine", auth(Role.user), reportController.getMyReports);
+
 /**
  * @openapi
  * /api/reports:
@@ -150,9 +152,10 @@ router.get(
  *       an embedding, performs weighted duplicate detection against nearby
  *       recent reports, and returns a tracking code on the persisted record.
  *
- *       `imageUrls` is an optional list of secure URLs that the **frontend**
+ *       `imageUrls` is an optional list of secure image URLs that the **frontend**
  *       uploads directly to its CDN (e.g. Cloudinary unsigned widget). The
  *       backend only stores and returns the URLs — it does not accept files.
+ *       `evidenceUrls` stores optional external supporting links separately.
  *     tags: [Reports]
  *     requestBody:
  *       required: true
@@ -169,6 +172,10 @@ router.get(
  *               latitude: { type: number, format: float }
  *               longitude: { type: number, format: float }
  *               imageUrls:
+ *                 type: array
+ *                 maxItems: 5
+ *                 items: { type: string, format: uri }
+ *               evidenceUrls:
  *                 type: array
  *                 maxItems: 5
  *                 items: { type: string, format: uri }
@@ -193,6 +200,8 @@ router.get(
  *               data:
  *                 id: "8d2e4f12-3a4b-4c1d-9e0f-7b8a9c0d1e2f"
  *                 trackingCode: "CIV-3K9P7X"
+ *                 imageUrls: []
+ *                 evidenceUrls: ["https://example.gov.bd/evidence/road-incident"]
  *                 category: "pothole"
  *                 severityLevel: "high"
  *                 severityScore: 0.74
@@ -214,6 +223,7 @@ router.get(
 router.post(
   "/",
   reportSubmitLimiter,
+  optionalAuth,
   validateRequest(createReportValidationSchema),
   reportController.createReport,
 );

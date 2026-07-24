@@ -42,7 +42,6 @@ describe("authService", () => {
         name: "Admin",
         email: "admin@test.com",
         password: "123456",
-        role: "admin",
       });
 
       expect(result).toEqual(mockUser);
@@ -51,6 +50,11 @@ describe("authService", () => {
       });
       expect(bcrypt.hash).toHaveBeenCalled();
       expect(prisma.user.create).toHaveBeenCalled();
+      expect(prisma.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ role: "user" }),
+        }),
+      );
     });
 
     it("should throw error if user already exists", async () => {
@@ -64,7 +68,6 @@ describe("authService", () => {
           name: "Admin",
           email: "admin@test.com",
           password: "123456",
-          role: "admin",
         }),
       ).rejects.toThrow("User already exists with this email");
     });
@@ -89,6 +92,7 @@ describe("authService", () => {
       });
 
       expect(result).toHaveProperty("accessToken");
+      expect(result.user).toMatchObject({ id: "uuid-123", role: "admin" });
       expect(typeof result.accessToken).toBe("string");
     });
 
@@ -103,7 +107,7 @@ describe("authService", () => {
       ).rejects.toThrow("Invalid email or password");
     });
 
-    it("should throw error if user is not admin", async () => {
+    it("should allow a citizen user to log in", async () => {
       const mockUser = {
         id: "uuid-123",
         name: "User",
@@ -114,12 +118,14 @@ describe("authService", () => {
 
       vi.mocked(prisma.user.findUnique).mockResolvedValue(mockUser as any);
 
-      await expect(
-        authService.loginUser({
-          email: "user@test.com",
-          password: "123456",
-        }),
-      ).rejects.toThrow("Access denied. Only admins can log in.");
+      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+
+      const result = await authService.loginUser({
+        email: "user@test.com",
+        password: "123456",
+      });
+
+      expect(result.user.role).toBe("user");
     });
 
     it("should throw error if password does not match", async () => {

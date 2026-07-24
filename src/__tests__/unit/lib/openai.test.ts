@@ -77,6 +77,51 @@ describe("runTriage", () => {
     expect(result.language).toBe("en");
   });
 
+  it("sends uploaded report images as vision input", async () => {
+    mockCreate.mockResolvedValue({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            category: "water_leak",
+            aiConfidence: 0.91,
+            severityLevel: "high",
+            severityScore: 0.8,
+            severityRationale: "Visible water is flooding the roadway.",
+            summary: "A major roadside water leak is flooding the carriageway.",
+            canonicalSummary: "Major roadside water leak flooding a carriageway",
+            suggestedDepartment: "water_and_sewerage",
+            suggestedAction: "Inspect and isolate the damaged water line.",
+            language: "en",
+          }),
+        },
+      }],
+    });
+
+    await runTriage({
+      description: "Water is coming through the road",
+      locationText: "Mirpur-10",
+      imageUrls: ["https://cdn.example.com/report.jpg"],
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          role: "user",
+          content: expect.arrayContaining([
+            expect.objectContaining({ type: "text" }),
+            {
+              type: "image_url",
+              image_url: {
+                url: "https://cdn.example.com/report.jpg",
+                detail: "auto",
+              },
+            },
+          ]),
+        }),
+      ]),
+    }));
+  });
+
   it("coerces unknown category to 'other'", async () => {
     mockCreate.mockResolvedValue({
       choices: [
