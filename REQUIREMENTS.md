@@ -1,4 +1,4 @@
-# CivicDesk AI — Hackathon Alignment & Rebuild Spec
+# Beacon AI — Hackathon Alignment & Rebuild Spec
 
 > **Competition:** AI & API Hackathon 2026 — First Edition
 > **Organizer:** IEEE Computer Society — SEU Student Branch Chapter

@@ -5,7 +5,7 @@ const options: swaggerJSDoc.Options = {
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "CivicDesk AI API",
+      title: "Beacon AI API",
       version: "2.0.0",
       description:
         "Backend API for civic infrastructure reporting and triage (potholes, streetlights, water leaks, illegal dumping).",

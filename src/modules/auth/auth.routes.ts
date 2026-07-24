@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import { authLimiter } from "../../middlewares/rateLimiter";
 import { auth } from "../../middlewares/auth";
 import { validateRequest } from "../../middlewares/validateRequest";
@@ -23,7 +23,7 @@ const router = Router();
  *             required: [name, email, password]
  *             properties:
  *               name: { type: string, example: "Dipjit Baroi" }
- *               email: { type: string, format: email, example: "admin@crisisdesk.ai" }
+ *               email: { type: string, format: email, example: "admin@beacon.ai" }
  *               password: { type: string, minLength: 8, example: "securepass123" }
  *     responses:
  *       201:
@@ -39,7 +39,7 @@ const router = Router();
  *               data:
  *                 id: "8d2e4f12-3a4b-4c1d-9e0f-7b8a9c0d1e2f"
  *                 name: "Dipjit Baroi"
- *                 email: "admin@crisisdesk.ai"
+ *                 email: "admin@beacon.ai"
  *                 role: "user"
  *                 createdAt: "2026-07-13T09:00:00.000Z"
  *       400:
@@ -82,7 +82,7 @@ router.post("/register", validateRequest(registerValidationSchema), authControll
  *             type: object
  *             required: [email, password]
  *             properties:
- *               email: { type: string, format: email, example: "admin@crisisdesk.ai" }
+ *               email: { type: string, format: email, example: "admin@beacon.ai" }
  *               password: { type: string, example: "supersecret123" }
  *     responses:
  *       200:
@@ -104,7 +104,7 @@ router.post("/register", validateRequest(registerValidationSchema), authControll
  *                 user:
  *                   id: "8d2e4f12-3a4b-4c1d-9e0f-7b8a9c0d1e2f"
  *                   name: "Dipjit Baroi"
- *                   email: "admin@crisisdesk.ai"
+ *                   email: "admin@beacon.ai"
  *                   role: "admin"
  *       400:
  *         description: Validation error

@@ -1,14 +1,14 @@
 {
-  "name": "crisis-desk-backend",
+  "name": "beacon-backend",
   "version": "1.0.0",
-  "description": "",
-  "homepage": "https://github.com/AbulBashar38/crisis-desk-backend#readme",
+  "description": "Backend API for the Beacon AI civic infrastructure reporting platform.",
+  "homepage": "https://github.com/Dipjitbaroi/Beacon-AI-backend#readme",
   "bugs": {
-    "url": "https://github.com/AbulBashar38/crisis-desk-backend/issues"
+    "url": "https://github.com/Dipjitbaroi/Beacon-AI-backend/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AbulBashar38/crisis-desk-backend.git"
+    "url": "git+https://github.com/Dipjitbaroi/Beacon-AI-backend.git"
   },
   "license": "ISC",
   "author": "",

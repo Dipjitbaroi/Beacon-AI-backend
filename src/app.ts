@@ -73,7 +73,7 @@ app.get("/api/health", (_req: Request, res: Response) => {
 });
 
 app.get("/", (_req: Request, res: Response) => {
-  res.send("CivicDesk AI API");
+  res.send("Beacon AI API");
 });
 
 app.use(notFound);

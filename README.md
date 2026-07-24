@@ -1,4 +1,4 @@
-# CivicDesk AI — Civic Infrastructure Reporting Platform (Backend)
+# Beacon AI — Civic Infrastructure Reporting Platform (Backend)
 
 > **Competition:** AI & API Hackathon 2026 — First Edition
 > **Organizer:** IEEE Computer Society — SEU Student Branch Chapter
@@ -10,7 +10,7 @@
 
 ## Overview
 
-**CivicDesk AI** is an AI-powered civic infrastructure platform that lets **citizens** report public-infrastructure problems (potholes, broken streetlights, water leaks, illegal dumping) and lets **government officials** review, prioritize, assign, and resolve them through a structured dashboard.
+**Beacon AI** is an AI-powered civic infrastructure platform that lets **citizens** report public-infrastructure problems (potholes, broken streetlights, water leaks, illegal dumping) and lets **government officials** review, prioritize, assign, and resolve them through a structured dashboard.
 
 Every submission is processed through **OpenAI ChatGPT** for:
 - **Category validation** against a fixed enum (`pothole`, `broken_streetlight`, `water_leak`, `illegal_dumping`, `other`)
@@ -26,9 +26,9 @@ Reports can be tracked by citizens using a public **tracking code** (`CIV-XXXXXX
 
 | Resource | URL |
 |----------|-----|
-| **Base URL** | https://civic-desk-backend.onrender.com |
-| **Swagger API Docs** | https://civic-desk-backend.onrender.com/api/docs |
-| **GitHub Repository** | https://github.com/Dipjitbaroi/CivicDesk-AI-backend |
+| **Base URL** | https://beacon-backend.onrender.com |
+| **Swagger API Docs** | https://beacon-backend.onrender.com/api/docs |
+| **GitHub Repository** | https://github.com/Dipjitbaroi/Beacon-AI-backend |
 
 ---
 
@@ -253,8 +253,8 @@ src/
 ## Setup & Installation
 
 ```bash
-git clone https://github.com/Dipjitbaroi/CivicDesk-AI-backend.git
-cd CivicDesk-AI-backend
+git clone https://github.com/Dipjitbaroi/Beacon-AI-backend.git
+cd Beacon-AI-backend
 npm install
 cp .env.example .env   # Fill in environment variables
 npx prisma generate
@@ -266,7 +266,7 @@ npm run dev
 
 ```env
 # Core
-DATABASE_URL=postgresql://user:pass@host:5432/crisisdesk
+DATABASE_URL=postgresql://user:pass@host:5432/beacon
 PORT=8080
 APP_URL=http://localhost:3000
 PUBLIC_URL=https://your-frontend.example

@@ -1,7 +1,7 @@
 services:
   api:
     build: .
-    container_name: crisis-desk-api
+    container_name: beacon-api
     working_dir: /app
     ports:
       - "${PORT:-8080}:${PORT:-8080}"

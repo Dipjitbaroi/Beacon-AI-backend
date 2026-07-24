@@ -1,11 +1,11 @@
-// Clean-slate DB reset for CivicDesk AI.
+// Clean-slate DB reset for Beacon AI.
 //
 // What it does (idempotent, safe to re-run):
 //   1) Drops all tables (CASCADE) under the "public" schema.
 //   2) Drops all enum types under the "public" schema.
 //   3) Wipes orphaned rows from _prisma_migrations.
 //   4) Runs `prisma migrate deploy` to re-apply the local migration
-//      (prisma/migrations/20260101000000_civicdesk_init).
+//      (prisma/migrations/20260101000000_beacon_init).
 //   5) Runs `prisma generate` so the generated client is up to date.
 //
 // Usage:
