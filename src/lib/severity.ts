@@ -2,9 +2,14 @@
  * Severity utilities.
  *
  * The canonical severity score is produced by the OpenAI triage call.
- * This module holds:
- *  - the buckets (low / medium / high / critical) boundaries
- *  - simple geometric helpers used by the duplicate-detection code
+ * Severity score is normalized to the range 0..1, where:
+ *   0.00 - 0.25  -> low
+ *   0.25 - 0.50  -> medium
+ *   0.50 - 0.75  -> high
+ *   0.75 - 1.00  -> critical
+ *
+ * This module also holds the geometric helpers used by the
+ * duplicate-detection code.
  */
 
 import { SeverityLevel } from "../../generated/prisma/enums";
@@ -16,14 +21,14 @@ export interface SeverityBucket {
 }
 
 export const SEVERITY_BUCKETS: SeverityBucket[] = [
-  { level: "low", min: 0, max: 3 },
-  { level: "medium", min: 4, max: 6 },
-  { level: "high", min: 7, max: 8 },
-  { level: "critical", min: 9, max: 10 },
+  { level: "low", min: 0, max: 0.25 },
+  { level: "medium", min: 0.25, max: 0.5 },
+  { level: "high", min: 0.5, max: 0.75 },
+  { level: "critical", min: 0.75, max: 1 },
 ];
 
 export function bucketFor(score: number): SeverityLevel {
-  const safe = Math.max(0, Math.min(10, score));
+  const safe = Math.max(0, Math.min(1, score));
   const found = SEVERITY_BUCKETS.find((b) => safe >= b.min && safe <= b.max);
   return (found?.level ?? "low") as SeverityLevel;
 }
@@ -59,9 +64,20 @@ export function geoScore(distanceMeters: number, radiusMeters: number): number {
   return 1 - distanceMeters / radiusMeters;
 }
 
+/**
+ * Convert an age in days to a 0..1 temporal-proximity score.
+ * A report created today scores 1; one older than `lookbackDays` scores 0.
+ */
+export function timeScore(ageDays: number, lookbackDays: number): number {
+  if (ageDays <= 0) return 1;
+  if (ageDays >= lookbackDays) return 0;
+  return 1 - ageDays / lookbackDays;
+}
+
 export default {
   SEVERITY_BUCKETS,
   bucketFor,
   haversineMeters,
   geoScore,
+  timeScore,
 };

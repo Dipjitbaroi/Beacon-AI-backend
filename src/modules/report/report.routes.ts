@@ -18,7 +18,7 @@ const router = Router();
 
 /**
  * @openapi
- * /api/reports/stats:
+ * /api/reports/stats/summary:
  *   get:
  *     summary: Aggregated dashboard metrics (admin)
  *     tags: [Reports]
@@ -27,7 +27,11 @@ const router = Router();
  *       200: { description: OK }
  *       401: { description: Unauthorized }
  */
-router.get("/stats", auth(Role.admin), reportController.getStatsSummary);
+router.get(
+  "/stats/summary",
+  auth(Role.admin),
+  reportController.getStatsSummary,
+);
 
 /**
  * @openapi
@@ -286,6 +290,32 @@ router.post(
   auth(Role.admin),
   validateRequest(addProgressUpdateValidationSchema),
   reportController.addProgressUpdate,
+);
+
+/**
+ * @openapi
+ * /api/reports/{id}/duplicates:
+ *   get:
+ *     summary: Get the duplicate-report chain for a given report (admin)
+ *     description: |
+ *       Returns the parent report and any reports that were linked as duplicates of it.
+ *       Walks one level up the duplicate chain to the root before collecting children.
+ *     tags: [Reports]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: OK }
+ *       404: { description: Not found }
+ */
+router.get(
+  "/:id/duplicates",
+  auth(Role.admin),
+  validateRequest(reportIdParamsValidationSchema),
+  reportController.getReportDuplicates,
 );
 
 /**

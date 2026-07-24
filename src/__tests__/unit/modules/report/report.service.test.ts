@@ -37,7 +37,7 @@ vi.mock("../../../../lib/openai", () => ({
     category: "pothole",
     aiConfidence: 0.9,
     severityLevel: "high",
-    severityScore: 7,
+    severityScore: 0.7,
     severityRationale: "Large pothole on main road",
     summary: "Large pothole reported on main road",
     canonicalSummary: "Large pothole near Mirpur-10 bus stop",
@@ -55,10 +55,13 @@ vi.mock("../../../../lib/embedding", () => ({
 
 vi.mock("../../../../config", () => ({
   default: {
-    duplicate_radius_m: 100,
-    duplicate_text_weight: 0.7,
-    duplicate_geo_weight: 0.3,
-    duplicate_threshold: 0.7,
+    duplicate_radius_m: 500,
+    duplicate_text_weight: 0.55,
+    duplicate_geo_weight: 0.2,
+    duplicate_category_weight: 0.15,
+    duplicate_time_weight: 0.1,
+    duplicate_threshold: 0.8,
+    duplicate_lookback_days: 7,
   },
 }));
 
@@ -70,6 +73,7 @@ const mockUpdate = vi.mocked(prisma.report.update);
 const mockDelete = vi.mocked(prisma.report.delete);
 const mockGroupBy = vi.mocked(prisma.report.groupBy);
 const mockTransaction = vi.mocked(prisma.$transaction);
+const mockProgressCreate = vi.mocked(prisma.progressUpdate.create);
 
 const basePayload = {
   description: "Pothole near Mirpur-10 bus stop",
@@ -84,22 +88,32 @@ describe("reportService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // $transaction(callback) → run the callback with a tx handle that
-    // exposes the same mocks as the regular prisma client (so that
-    // `tx.report.update(...)` calls land in the same mock as
-    // `prisma.report.update(...)`).
-    mockTransaction.mockImplementation(async (cb: any) => {
-      return cb({
-        report: {
-          create: mockCreate,
-          update: mockUpdate,
-          findUnique: mockFindUnique,
-          delete: mockDelete,
-        },
-        progressUpdate: {
-          create: vi.fn().mockResolvedValue({}),
-        },
-      });
+    // $transaction supports two call shapes:
+    //   1) $transaction(async (tx) => { ... })  → callback form
+    //   2) $transaction([ op1, op2 ])            → sequential array form
+    //
+    // The callback form runs the callback with a tx handle that exposes the
+    // same mocks as the regular prisma client. The array form runs each
+    // operation sequentially and returns the resulting tuple, exactly like
+    // Prisma's real `$transaction` API.
+    mockTransaction.mockImplementation(async (arg: any) => {
+      if (typeof arg === "function") {
+        return arg({
+          report: {
+            create: mockCreate,
+            update: mockUpdate,
+            findUnique: mockFindUnique,
+            delete: mockDelete,
+          },
+          progressUpdate: {
+            create: vi.fn().mockResolvedValue({}),
+          },
+        });
+      }
+    // Array form: each entry is the return value of a mocked Prisma
+    // call (a Promise). Promise.all behaves like the real Prisma
+    // `$transaction` and returns the resolved tuple.
+    return Promise.all(arg as Promise<unknown>[]);
     });
   });
 
@@ -155,8 +169,11 @@ describe("reportService", () => {
         {
           id: "existing-1",
           embedding: [0.1, 0.2, 0.3],
+          category: "pothole",
+          severityScore: 0.7,
           latitude: 23.8,
           longitude: 90.4,
+          createdAt: new Date(),
         },
       ] as any);
 
@@ -168,7 +185,7 @@ describe("reportService", () => {
         category: "pothole",
         aiCategory: "pothole",
         severityLevel: "high",
-        severityScore: 7,
+        severityScore: 0.7,
         embedding: [0.1, 0.2, 0.3],
       };
       mockCreate.mockResolvedValue(createdReport as any);
@@ -187,8 +204,11 @@ describe("reportService", () => {
         {
           id: "other-1",
           embedding: [0.9, 0.8, 0.7],
+          category: "pothole",
+          severityScore: 0.7,
           latitude: 23.8,
           longitude: 90.4,
+          createdAt: new Date(),
         },
       ] as any);
 
@@ -210,12 +230,23 @@ describe("reportService", () => {
       const { cosineSimilarity } = await import("../../../../lib/embedding");
 
       mockFindMany.mockResolvedValue([
-        { id: "empty", embedding: [] as any, latitude: 1, longitude: 1 },
+        {
+          id: "empty",
+          embedding: [] as any,
+          category: "pothole",
+          severityScore: 0.7,
+          latitude: 1,
+          longitude: 1,
+          createdAt: new Date(),
+        },
         {
           id: "valid",
           embedding: [0.5, 0.5, 0.5],
+          category: "pothole",
+          severityScore: 0.7,
           latitude: 23.8,
           longitude: 90.4,
+          createdAt: new Date(),
         },
       ] as any);
 
@@ -240,7 +271,7 @@ describe("reportService", () => {
         category: "other",
         aiConfidence: 0.3,
         severityLevel: "low",
-        severityScore: 2,
+        severityScore: 0.2,
         severityRationale: "uncertain",
         summary: "Untriaged",
         canonicalSummary: "Untriaged report",
@@ -360,12 +391,30 @@ describe("reportService", () => {
 
   describe("trackReport", () => {
     it("returns public-safe report by tracking code", async () => {
-      const mockReport = { id: "r1", trackingCode: "PV9K-3X7Q" };
+      const mockReport = {
+        id: "r1",
+        trackingCode: "PV9K-3X7Q",
+        category: "pothole",
+        canonicalSummary: "Large pothole near Mirpur-10 bus stop",
+        severityLevel: "high",
+        severityScore: 0.7,
+        severityRationale: "Large pothole on main road",
+        status: "pending",
+        assignedDepartment: "roads_and_highways",
+        language: "en",
+        imageUrls: [],
+        progress: [],
+        createdAt: new Date(),
+      };
       mockFindUnique.mockResolvedValue(mockReport as any);
 
       const result = await reportService.trackReport("PV9K-3X7Q");
 
-      expect(result).toEqual(mockReport);
+      expect(result.trackingCode).toBe("PV9K-3X7Q");
+      expect(result).not.toHaveProperty("id");
+      expect(result).not.toHaveProperty("latitude");
+      expect(result).not.toHaveProperty("longitude");
+      expect(result).not.toHaveProperty("description");
       expect(mockFindUnique).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { trackingCode: "PV9K-3X7Q" },
@@ -474,15 +523,31 @@ describe("reportService", () => {
   });
 
   describe("deleteReport", () => {
-    it("deletes the report and returns it", async () => {
+    it("soft-deletes the report and returns the updated report + progress note", async () => {
       mockFindUnique.mockResolvedValue({ id: "r1" } as any);
-      mockDelete.mockResolvedValue({ id: "r1" } as any);
+      mockUpdate.mockResolvedValue({ id: "r1", status: "rejected" } as any);
+      mockProgressCreate.mockResolvedValue({
+        id: "p1",
+        status: "rejected",
+        note: "Report removed by administrator.",
+        visibility: "internal",
+        createdAt: new Date(),
+      } as any);
 
       const result = await reportService.deleteReport("r1");
 
-      expect(result.id).toBe("r1");
-      expect(mockDelete).toHaveBeenCalledWith(
+      expect(result.report.id).toBe("r1");
+      expect(result.progress).toBeDefined();
+      expect(mockUpdate).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: "r1" } }),
+      );
+      expect(mockProgressCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: "rejected",
+            visibility: "internal",
+          }),
+        }),
       );
     });
 
@@ -497,15 +562,26 @@ describe("reportService", () => {
 
   describe("getStatsSummary", () => {
     it("returns full analytics summary", async () => {
+      // Parallel call (Promise.all):
+      //   count × 8 (total, pending, under_review, assigned, in_progress,
+      //               resolved, rejected, critical)
+      //   count × 1 (duplicatesLinked)
+      //   groupBy × 3 (category, severity, department)
+      //   findMany × 1 (resolved, for avg resolution time)
+      // Sequential inside the last-7-days loop: count × 7.
       mockCount
-        .mockResolvedValueOnce(45) // total
-        .mockResolvedValueOnce(18) // pending
-        .mockResolvedValueOnce(2) // under_review
-        .mockResolvedValueOnce(5) // assigned
-        .mockResolvedValueOnce(10) // in_progress
-        .mockResolvedValueOnce(8) // resolved
-        .mockResolvedValueOnce(2) // rejected
+        // --- parallel block (9) ---
+        .mockResolvedValueOnce(45) // totalReports
+        .mockResolvedValueOnce(18) // pendingReports
+        .mockResolvedValueOnce(2) // underReviewReports
+        .mockResolvedValueOnce(5) // assignedReports
+        .mockResolvedValueOnce(10) // inProgressReports
+        .mockResolvedValueOnce(8) // resolvedReports
+        .mockResolvedValueOnce(2) // rejectedReports
+        .mockResolvedValueOnce(7) // criticalReports
         .mockResolvedValueOnce(3); // duplicatesLinked
+      // --- sequential last-7-days loop (7) ---
+      for (let i = 0; i < 7; i++) mockCount.mockResolvedValueOnce(0);
 
       mockGroupBy
         .mockResolvedValueOnce([
@@ -523,11 +599,15 @@ describe("reportService", () => {
           },
         ] as any);
 
+      // resolvedForAvg: findMany
+      mockFindMany.mockResolvedValueOnce([]);
+
       const result = await reportService.getStatsSummary();
 
       expect(result.totalReports).toBe(45);
-      expect(result.byStatus.pending).toBe(18);
-      expect(result.byStatus.resolved).toBe(8);
+      expect(result.pendingReports).toBe(18);
+      expect(result.criticalReports).toBe(7);
+      expect(result.resolvedReports).toBe(8);
       expect(result.duplicatesLinked).toBe(3);
       expect(result.categoryBreakdown).toEqual({
         pothole: 20,
@@ -537,6 +617,8 @@ describe("reportService", () => {
       expect(result.departmentBreakdown).toEqual({
         roads_and_highways: 25,
       });
+      expect(result.last7Days).toHaveLength(7);
+      expect(result.averageResolutionTimeHours).toBe(0);
     });
   });
 });

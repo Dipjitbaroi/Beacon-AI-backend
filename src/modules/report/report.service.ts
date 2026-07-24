@@ -6,7 +6,10 @@
  *   2. Call OpenAI triage (category + severity + summary)
  *   3. Build a canonical English text and embed it
  *   4. Score against recent reports with the same category:
- *        duplicate_score = w_text * cosine_sim + w_geo * geo_score
+ *        duplicate_score = w_text * cosine_sim
+ *                        + w_category * category_match
+ *                        + w_geo * geo_score
+ *                        + w_time * time_score
  *      If above threshold, link to the parent report.
  *   5. Persist Report + initial public ProgressUpdate
  */
@@ -16,7 +19,7 @@ import { Prisma } from "../../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
 import { runTriage } from "../../lib/openai";
 import { generateEmbedding, cosineSimilarity } from "../../lib/embedding";
-import { haversineMeters, geoScore } from "../../lib/severity";
+import { haversineMeters, geoScore, timeScore } from "../../lib/severity";
 import { generateTrackingCode } from "../../utils/trackingCode";
 import { ApiError } from "../../utils/ApiError";
 import config from "../../config";
@@ -26,7 +29,6 @@ import {
   IReportFilters,
 } from "./report.interface";
 
-const DUPLICATE_LOOKBACK_DAYS = 30;
 const MAX_TRACKING_CODE_ATTEMPTS = 5;
 
 const REPORT_LIST_SELECT = {
@@ -94,17 +96,16 @@ const createReport = async (payload: ICreateReport) => {
   const embeddingInput = `${triage.canonicalSummary} | ${locationText}`;
   const embedding = await generateEmbedding(embeddingInput);
 
-  // Step 3: Duplicate detection (semantic + geographic)
+  // Step 3: Duplicate detection (semantic + category + geographic + temporal)
   let duplicateOfId: string | null = null;
   let duplicateScore: number | null = null;
 
   const lookback = new Date(
-    Date.now() - DUPLICATE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
+    Date.now() - config.duplicate_lookback_days * 24 * 60 * 60 * 1000,
   );
 
   const candidates = await prisma.report.findMany({
     where: {
-      category: finalCategory,
       status: { not: "rejected" },
       createdAt: { gte: lookback },
     },
@@ -113,6 +114,8 @@ const createReport = async (payload: ICreateReport) => {
       embedding: true,
       latitude: true,
       longitude: true,
+      category: true,
+      createdAt: true,
     },
     take: 200,
   });
@@ -124,6 +127,8 @@ const createReport = async (payload: ICreateReport) => {
     if (!candidate.embedding?.length) continue;
 
     const textSim = cosineSimilarity(embedding, candidate.embedding);
+    const categorySim = candidate.category === finalCategory ? 1 : 0;
+
     let geoSim = 0;
     if (
       typeof latitude === "number" &&
@@ -138,14 +143,20 @@ const createReport = async (payload: ICreateReport) => {
         candidate.longitude,
       );
       geoSim = geoScore(dist, config.duplicate_radius_m);
-    } else {
-      // No geo on either side → assume the text component fully decides.
-      geoSim = 0;
     }
+
+    const ageDays =
+      (Date.now() - candidate.createdAt.getTime()) / (24 * 60 * 60 * 1000);
+    const tSim = timeScore(
+      ageDays,
+      config.duplicate_lookback_days,
+    );
 
     const score =
       config.duplicate_text_weight * textSim +
-      config.duplicate_geo_weight * geoSim;
+      config.duplicate_category_weight * categorySim +
+      config.duplicate_geo_weight * geoSim +
+      config.duplicate_time_weight * tSim;
 
     if (score > bestScore) {
       bestScore = score;
@@ -196,7 +207,7 @@ const createReport = async (payload: ICreateReport) => {
       data: {
         reportId: created.id,
         status: "pending",
-        note: "Report submitted and queued for triage.",
+        note: "Report received",
         visibility: "public",
       },
     });
@@ -304,24 +315,17 @@ const trackReport = async (trackingCode: string, includeInternal = false) => {
   const report = await prisma.report.findUnique({
     where: { trackingCode },
     select: {
-      id: true,
       trackingCode: true,
       category: true,
+      canonicalSummary: true,
       severityLevel: true,
       severityScore: true,
       severityRationale: true,
-      summary: true,
-      description: true,
-      locationText: true,
-      latitude: true,
-      longitude: true,
-      imageUrls: true,
       status: true,
       assignedDepartment: true,
-      duplicateOfId: true,
-      duplicateScore: true,
+      language: true,
+      imageUrls: true,
       createdAt: true,
-      updatedAt: true,
       progressUpdates: {
         where: includeInternal ? {} : { visibility: "public" },
         orderBy: { createdAt: "desc" },
@@ -337,7 +341,24 @@ const trackReport = async (trackingCode: string, includeInternal = false) => {
   });
 
   if (!report) throw new ApiError(httpStatus.NOT_FOUND, "Report not found.");
-  return report;
+
+  // Strip any internal/duplicate bookkeeping fields that may have leaked.
+  return {
+    trackingCode: report.trackingCode,
+    category: report.category,
+    summary: report.canonicalSummary,
+    severity: {
+      level: report.severityLevel,
+      score: report.severityScore,
+      rationale: report.severityRationale,
+    },
+    status: report.status,
+    department: report.assignedDepartment,
+    language: report.language,
+    images: report.imageUrls,
+    createdAt: report.createdAt,
+    progress: report.progressUpdates,
+  };
 };
 
 const updateReportStatus = async (
@@ -460,7 +481,95 @@ const deleteReport = async (id: string) => {
   });
   if (!existing) throw new ApiError(httpStatus.NOT_FOUND, "Report not found.");
 
-  return prisma.report.delete({ where: { id }, select: REPORT_LIST_SELECT });
+  // Soft delete: set status to rejected and stamp deletedAt. Keeps the
+  // audit trail intact while removing the report from active dashboards.
+  const now = new Date();
+  const [report, progress] = await prisma.$transaction([
+    prisma.report.update({
+      where: { id },
+      data: { status: "rejected", deletedAt: now },
+      select: REPORT_LIST_SELECT,
+    }),
+    prisma.progressUpdate.create({
+      data: {
+        reportId: id,
+        status: "rejected",
+        note: "Report removed by administrator.",
+        visibility: "internal",
+      },
+      select: {
+        id: true,
+        status: true,
+        note: true,
+        visibility: true,
+        createdAt: true,
+      },
+    }),
+  ]);
+
+  return { report, progress };
+};
+
+const getReportDuplicates = async (id: string) => {
+  const report = await prisma.report.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      trackingCode: true,
+      category: true,
+      severityLevel: true,
+      status: true,
+      createdAt: true,
+      duplicateOfId: true,
+    },
+  });
+
+  if (!report) throw new ApiError(httpStatus.NOT_FOUND, "Report not found.");
+
+  // Walk up to the root of the duplicate chain, then collect all descendants.
+  let parent: typeof report | null = null;
+  if (report.duplicateOfId) {
+    parent = await prisma.report.findUnique({
+      where: { id: report.duplicateOfId },
+      select: {
+        id: true,
+        trackingCode: true,
+        category: true,
+        severityLevel: true,
+        status: true,
+        createdAt: true,
+        duplicateOfId: true,
+      },
+    });
+  }
+
+  const rootId = parent ? parent.id : report.id;
+
+  const children = await prisma.report.findMany({
+    where: {
+      OR: [
+        { duplicateOfId: rootId },
+        ...(rootId === report.id ? [] : [{ duplicateOfId: report.id }]),
+      ],
+      id: { not: rootId },
+    },
+    select: {
+      id: true,
+      trackingCode: true,
+      category: true,
+      severityLevel: true,
+      severityScore: true,
+      status: true,
+      duplicateScore: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return {
+    parent: parent ?? report,
+    children,
+  };
 };
 
 const getStatsSummary = async () => {
@@ -472,10 +581,12 @@ const getStatsSummary = async () => {
     inProgressReports,
     resolvedReports,
     rejectedReports,
+    criticalReports,
     duplicatesLinked,
     byCategory,
     bySeverity,
     byDepartment,
+    resolvedForAvg,
   ] = await Promise.all([
     prisma.report.count(),
     prisma.report.count({ where: { status: "pending" } }),
@@ -484,6 +595,7 @@ const getStatsSummary = async () => {
     prisma.report.count({ where: { status: "in_progress" } }),
     prisma.report.count({ where: { status: "resolved" } }),
     prisma.report.count({ where: { status: "rejected" } }),
+    prisma.report.count({ where: { severityLevel: "critical" } }),
     prisma.report.count({ where: { duplicateOfId: { not: null } } }),
     prisma.report.groupBy({
       by: ["category"],
@@ -497,7 +609,44 @@ const getStatsSummary = async () => {
       by: ["assignedDepartment"],
       _count: { _all: true },
     }),
+    // Average resolution time (createdAt -> updatedAt on resolved reports)
+    prisma.report.findMany({
+      where: { status: "resolved" },
+      select: { createdAt: true, updatedAt: true },
+    }),
   ]);
+
+  // Build last-7-days time series
+  const last7Days: { date: string; count: number }[] = [];
+  const now = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const day = new Date(now);
+    day.setUTCHours(0, 0, 0, 0);
+    day.setUTCDate(day.getUTCDate() - i);
+    const next = new Date(day);
+    next.setUTCDate(next.getUTCDate() + 1);
+    last7Days.push({
+      date: day.toISOString().slice(0, 10),
+      count: 0,
+    });
+    // count reports created on this day
+    const c = await prisma.report.count({
+      where: { createdAt: { gte: day, lt: next } },
+    });
+    last7Days[last7Days.length - 1]!.count = c;
+  }
+
+  // Average resolution time in hours
+  let averageResolutionTimeHours = 0;
+  if (resolvedForAvg.length) {
+    const totalMs = resolvedForAvg.reduce(
+      (acc, r) => acc + (r.updatedAt.getTime() - r.createdAt.getTime()),
+      0,
+    );
+    averageResolutionTimeHours = Number(
+      (totalMs / resolvedForAvg.length / 3_600_000).toFixed(2),
+    );
+  }
 
   const categoryBreakdown: Record<string, number> = {};
   for (const item of byCategory) {
@@ -518,7 +667,13 @@ const getStatsSummary = async () => {
 
   return {
     totalReports,
-    byStatus: {
+    pendingReports,
+    criticalReports,
+    resolvedReports,
+    categoryBreakdown,
+    severityBreakdown,
+    departmentBreakdown,
+    statusBreakdown: {
       pending: pendingReports,
       under_review: underReviewReports,
       assigned: assignedReports,
@@ -526,10 +681,9 @@ const getStatsSummary = async () => {
       resolved: resolvedReports,
       rejected: rejectedReports,
     },
+    averageResolutionTimeHours,
+    last7Days,
     duplicatesLinked,
-    categoryBreakdown,
-    severityBreakdown,
-    departmentBreakdown,
   };
 };
 
@@ -543,4 +697,5 @@ export const reportService = {
   addProgressUpdate,
   deleteReport,
   getStatsSummary,
+  getReportDuplicates,
 };

@@ -26,6 +26,7 @@ model Report {
   suggestedAction    String?
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
+  deletedAt          DateTime?
 
   progressUpdates   ProgressUpdate[]
   duplicateChildren Report[]         @relation("DuplicateLink")
@@ -36,6 +37,7 @@ model Report {
   @@index([assignedDepartment])
   @@index([createdAt])
   @@index([trackingCode])
+  @@index([deletedAt])
   @@map("reports")
 }
 

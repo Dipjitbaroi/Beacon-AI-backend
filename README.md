@@ -26,9 +26,9 @@ Reports can be tracked by citizens using a public **tracking code** (`CIV-XXXXXX
 
 | Resource | URL |
 |----------|-----|
-| **Base URL** | https://crisis-desk-backend.onrender.com |
-| **Swagger API Docs** | https://crisis-desk-backend.onrender.com/api/docs |
-| **GitHub Repository** | https://github.com/AbulBashar38/crisis-desk-backend |
+| **Base URL** | https://civic-desk-backend.onrender.com |
+| **Swagger API Docs** | https://civic-desk-backend.onrender.com/api/docs |
+| **GitHub Repository** | https://github.com/Dipjitbaroi/CivicDesk-AI-backend |
 
 ---
 
@@ -253,8 +253,8 @@ src/
 ## Setup & Installation
 
 ```bash
-git clone https://github.com/AbulBashar38/crisis-desk-backend.git
-cd crisis-desk-backend
+git clone https://github.com/Dipjitbaroi/CivicDesk-AI-backend.git
+cd CivicDesk-AI-backend
 npm install
 cp .env.example .env   # Fill in environment variables
 npx prisma generate

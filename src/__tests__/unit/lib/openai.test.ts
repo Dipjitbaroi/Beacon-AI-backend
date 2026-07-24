@@ -72,7 +72,7 @@ describe("runTriage", () => {
 
     expect(result.category).toBe("pothole");
     expect(result.severityLevel).toBe("high");
-    expect(result.severityScore).toBe(7);
+    expect(result.severityScore).toBe(0.7);
     expect(result.suggestedDepartment).toBe("roads_and_highways");
     expect(result.language).toBe("en");
   });
@@ -86,7 +86,7 @@ describe("runTriage", () => {
               category: "alien_invasion",
               aiConfidence: 0.5,
               severityLevel: "low",
-              severityScore: 1,
+              severityScore: 0.1,
               severityRationale: "unrecognized",
               summary: "weird",
               canonicalSummary: "unrecognized",

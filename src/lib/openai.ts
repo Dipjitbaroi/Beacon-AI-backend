@@ -35,7 +35,7 @@ export interface TriageResult {
   category: ReportCategory;
   aiConfidence: number; // 0..1
   severityLevel: SeverityLevel;
-  severityScore: number; // 0..10
+  severityScore: number; // 0..1 (normalized; 0 = cosmetic, 1 = imminent public-safety hazard)
   severityRationale: string;
   summary: string; // short citizen-facing summary (English)
   canonicalSummary: string; // normalized sentence used for embedding
@@ -55,7 +55,7 @@ Your job is to read a citizen-submitted report (description + location text, som
   "category": one of ["pothole","broken_streetlight","water_leak","illegal_dumping","other"],
   "aiConfidence": number 0..1,
   "severityLevel": one of ["low","medium","high","critical"],
-  "severityScore": number 0..10,
+  "severityScore": number 0..1 (0 = cosmetic, 1 = imminent public-safety hazard),
   "severityRationale": one short sentence explaining the severity,
   "summary": one short sentence (English) describing the issue for an admin dashboard,
   "canonicalSummary": one short normalized English sentence used for semantic search (e.g. "Large pothole near Mirpur-10 bus stop"),
@@ -120,11 +120,16 @@ function clamp(n: number, lo: number, hi: number): number {
 }
 
 function normalize(raw: RawTriage): TriageResult {
+  // Some models still emit 0..10; accept both and normalize to 0..1.
+  const rawScore = Number(raw.severityScore ?? 0);
+  const normalizedScore =
+    rawScore > 1 ? clamp(rawScore / 10, 0, 1) : clamp(rawScore, 0, 1);
+
   return {
     category: coerce(raw.category, CATEGORIES, "other"),
     aiConfidence: clamp(Number(raw.aiConfidence ?? 0), 0, 1),
     severityLevel: coerce(raw.severityLevel, SEVERITIES, "low"),
-    severityScore: clamp(Number(raw.severityScore ?? 0), 0, 10),
+    severityScore: normalizedScore,
     severityRationale: String(raw.severityRationale ?? "").slice(0, 500),
     summary: String(raw.summary ?? "").slice(0, 500),
     canonicalSummary: String(raw.canonicalSummary ?? "").slice(0, 500),
@@ -144,7 +149,7 @@ function fallbackTriage(reason: string): TriageResult {
     category: "other",
     aiConfidence: 0,
     severityLevel: "low",
-    severityScore: 1,
+    severityScore: 0.2,
     severityRationale: `AI triage unavailable (${reason}); routed for manual review.`,
     summary: "Manual review required.",
     canonicalSummary: "Untriaged civic report",

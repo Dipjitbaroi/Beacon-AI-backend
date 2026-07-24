@@ -10,7 +10,12 @@
 
 import { Request, Response, NextFunction } from "express";
 import { catchAsync } from "../../utils/catchAsync";
-import { uploadBuffer, buildPublicId } from "../../lib/cloudinary";
+import {
+  uploadBuffer,
+  buildPublicId,
+  getDirectUploadPayload,
+  DirectUploadPayload,
+} from "../../lib/cloudinary";
 import { ApiError } from "../../utils/ApiError";
 import { UploadResult } from "../../lib/cloudinary";
 
@@ -24,6 +29,44 @@ interface MulterFile {
   size: number;
   originalname: string;
 }
+
+/**
+ * Build signed direct-upload payloads the frontend can use to push images
+ * straight to Cloudinary without proxying through our server. The auth check
+ * ensures only verified reporters or admins can request a signature.
+ *
+ * Body:
+ *   { trackingCode: string, count?: number (1..5) }
+ *
+ * Response:
+ *   { data: { signatures: DirectUploadPayload[], expiresAt: string } }
+ */
+export const signUpload = catchAsync(
+  async (req: Request, res: Response, _next: NextFunction) => {
+    const trackingCode = String((req.body && req.body.trackingCode) ?? "").trim();
+    const rawCount = Number((req.body && req.body.count) ?? 1);
+
+    if (!trackingCode || trackingCode.length < 4) {
+      throw new ApiError(400, "trackingCode is required");
+    }
+    if (!Number.isFinite(rawCount) || rawCount < 1 || rawCount > MAX_FILES) {
+      throw new ApiError(400, `count must be between 1 and ${MAX_FILES}`);
+    }
+
+    const signatures: DirectUploadPayload[] = [];
+    for (let i = 0; i < rawCount; i++) {
+      signatures.push(getDirectUploadPayload(trackingCode, i));
+    }
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        signatures,
+        expiresAt: signatures[0]?.expiresAt,
+      },
+    });
+  },
+);
 
 export const uploadImages = catchAsync(
   async (req: Request, res: Response, _next: NextFunction) => {

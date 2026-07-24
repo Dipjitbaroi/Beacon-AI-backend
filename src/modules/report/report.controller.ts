@@ -141,13 +141,13 @@ const addProgressUpdate = catchAsync(
 
 const deleteReport = catchAsync(
   async (req: Request, res: Response, _next: NextFunction) => {
-    const report = await reportService.deleteReport(req.params.id as string);
+    const result = await reportService.deleteReport(req.params.id as string);
 
     sendResponse(res, {
       success: true,
       statusCode: httpStatus.OK,
-      message: "Report deleted successfully",
-      data: report,
+      message: "Report archived (soft-deleted) successfully",
+      data: result,
     });
   },
 );
@@ -165,6 +165,21 @@ const getStatsSummary = catchAsync(
   },
 );
 
+const getReportDuplicates = catchAsync(
+  async (req: Request, res: Response, _next: NextFunction) => {
+    const data = await reportService.getReportDuplicates(
+      req.params.id as string,
+    );
+
+    sendResponse(res, {
+      success: true,
+      statusCode: httpStatus.OK,
+      message: "Duplicate report chain retrieved",
+      data,
+    });
+  },
+);
+
 export const reportController = {
   createReport,
   getAllReports,
@@ -175,4 +190,5 @@ export const reportController = {
   addProgressUpdate,
   deleteReport,
   getStatsSummary,
+  getReportDuplicates,
 };
