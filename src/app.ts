@@ -9,7 +9,6 @@ import { globalErrorHandler } from "./middlewares/globalErrorHandler";
 import { notFound } from "./middlewares/notFound";
 import { authRoutes } from "./modules/auth/auth.routes";
 import { reportRoutes } from "./modules/report/report.routes";
-import { uploadRoutes } from "./modules/upload/upload.routes";
 
 const app: Application = express();
 
@@ -51,7 +50,6 @@ app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/reports", reportRoutes);
-app.use("/api/upload", uploadRoutes);
 
 app.get("/api/docs.json", (_req: Request, res: Response) => {
   res.setHeader("Content-Type", "application/json");

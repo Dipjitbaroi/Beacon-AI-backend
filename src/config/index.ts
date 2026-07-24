@@ -19,12 +19,6 @@ export default {
   openai_embedding_model:
     process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small",
 
-  // Cloudinary
-  cloudinary_cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
-  cloudinary_api_key: process.env.CLOUDINARY_API_KEY!,
-  cloudinary_api_secret: process.env.CLOUDINARY_API_SECRET!,
-  cloudinary_folder: process.env.CLOUDINARY_FOLDER || "civic-reports",
-
   // Duplicate detection thresholds
   // Composite = text * w_text + category * w_cat + geo * w_geo + time * w_time
   duplicate_text_weight: Number(process.env.DUP_TEXT_WEIGHT ?? "0.55"),

@@ -119,7 +119,7 @@ router.get(
  *                 department: "roads_and_highways"
  *                 language: "en"
  *                 images:
- *                   - "https://res.cloudinary.com/dqxroal4k/image/upload/v1/civic-reports/CIV-3K9P7X/0.jpg"
+ *                   - "https://res.cloudinary.com/<your-cloud>/image/upload/v123/civic-reports/CIV-3K9P7X/0.jpg"
  *                 createdAt: "2026-07-22T10:30:00.000Z"
  *                 progress:
  *                   - id: "a1b2c3d4-..."
@@ -149,6 +149,10 @@ router.get(
  *       Runs OpenAI triage (category, severity, summary, department), generates
  *       an embedding, performs weighted duplicate detection against nearby
  *       recent reports, and returns a tracking code on the persisted record.
+ *
+ *       `imageUrls` is an optional list of secure URLs that the **frontend**
+ *       uploads directly to its CDN (e.g. Cloudinary unsigned widget). The
+ *       backend only stores and returns the URLs — it does not accept files.
  *     tags: [Reports]
  *     requestBody:
  *       required: true
