@@ -11,6 +11,10 @@ const options: swaggerJSDoc.Options = {
         "Backend API for civic infrastructure reporting and triage (potholes, streetlights, water leaks, illegal dumping).",
     },
     servers: [
+      {
+        url: `http://localhost:${config.port}`,
+        description: "Local development",
+      },
       ...(process.env.PUBLIC_URL
         ? [
             {
@@ -19,10 +23,6 @@ const options: swaggerJSDoc.Options = {
             },
           ]
         : []),
-      {
-        url: `http://localhost:${config.port}`,
-        description: "Local development",
-      },
     ],
     components: {
       securitySchemes: {

@@ -21,7 +21,7 @@ const router = Router();
  *             type: object
  *             required: [name, email, password, role]
  *             properties:
- *               name: { type: string, example: "Abul Bashar" }
+ *               name: { type: string, example: "Dipjit Baroi" }
  *               email: { type: string, format: email, example: "admin@crisisdesk.ai" }
  *               password: { type: string, minLength: 6, example: "supersecret123" }
  *               role: { type: string, enum: [user, admin], example: admin }
@@ -38,7 +38,7 @@ const router = Router();
  *               message: "User registered successfully"
  *               data:
  *                 id: "8d2e4f12-3a4b-4c1d-9e0f-7b8a9c0d1e2f"
- *                 name: "Abul Bashar"
+ *                 name: "Dipjit Baroi"
  *                 email: "admin@crisisdesk.ai"
  *                 role: "admin"
  *                 createdAt: "2026-07-13T09:00:00.000Z"

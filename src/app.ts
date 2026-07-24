@@ -13,9 +13,14 @@ import { uploadRoutes } from "./modules/upload/upload.routes";
 
 const app: Application = express();
 
-const allowedOrigins = [config.app_url, process.env.PUBLIC_URL].filter(
-  (o): o is string => Boolean(o),
-);
+const allowedOrigins = [
+  config.app_url,
+  process.env.PUBLIC_URL,
+  `http://localhost:${config.port}`,
+  `http://127.0.0.1:${config.port}`,
+  "http://localhost:3000",
+  "http://localhost:3001",
+].filter((o): o is string => Boolean(o));
 
 app.use(
   cors({
