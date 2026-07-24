@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Request, Response, NextFunction } from "express";
-import { auth } from "../../../middlewares/auth";
+import { auth, optionalAuth } from "../../../middlewares/auth";
 
 vi.mock("../../../utils/jwt", () => ({
   jwtUtils: {
@@ -17,7 +17,7 @@ const mockRequest = (overrides: Partial<Request> = {}): Request =>
     ...overrides,
   }) as any;
 
-const mockResponse = (): Response => ({}) as any;
+const mockResponse = (): Response => ({ clearCookie: vi.fn() }) as any;
 
 describe("auth middleware", () => {
   let next: NextFunction;
@@ -145,5 +145,42 @@ describe("auth middleware", () => {
       email: "admin@test.com",
       role: "admin",
     });
+  });
+
+  it("continues as a guest when an optional token has expired", async () => {
+    const req = mockRequest({
+      headers: { authorization: "Bearer expired-token" },
+    });
+    const res = mockResponse();
+    vi.mocked(jwtUtils.verifyToken).mockReturnValue({
+      success: false,
+      error: "jwt expired",
+    });
+
+    await optionalAuth(req, res, next);
+
+    expect(res.clearCookie).toHaveBeenCalledWith("accessToken");
+    expect(req.user).toBeUndefined();
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it("attaches a valid optional user when the token is current", async () => {
+    const req = mockRequest({
+      headers: { authorization: "Bearer valid-token" },
+    });
+    vi.mocked(jwtUtils.verifyToken).mockReturnValue({
+      success: true,
+      data: { id: "2", name: "Citizen", email: "citizen@test.com", role: "user" },
+    } as any);
+
+    await optionalAuth(req, mockResponse(), next);
+
+    expect(req.user).toEqual({
+      id: "2",
+      name: "Citizen",
+      email: "citizen@test.com",
+      role: "user",
+    });
+    expect(next).toHaveBeenCalledWith();
   });
 });

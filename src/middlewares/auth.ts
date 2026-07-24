@@ -55,7 +55,7 @@ export const auth = (...requiredRoles: Role[]) => {
 };
 
 export const optionalAuth = catchAsync(
-  async (req: Request, _res: Response, next: NextFunction) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     const token =
       req.cookies?.accessToken ||
       req.headers.authorization?.replace(/^Bearer\s+/i, "");
@@ -67,7 +67,12 @@ export const optionalAuth = catchAsync(
 
     const verifiedToken = jwtUtils.verifyToken(token, config.jwt_access_secret);
     if (!verifiedToken.success) {
-      throw new ApiError(httpStatus.UNAUTHORIZED, verifiedToken.error);
+      // Public endpoints must remain usable when a browser sends a stale or
+      // malformed optional session. Continue as a guest and remove any
+      // server-side cookie rather than exposing JWT implementation errors.
+      res.clearCookie("accessToken");
+      next();
+      return;
     }
 
     const { id, name, email, role } = verifiedToken.data as JwtPayload;

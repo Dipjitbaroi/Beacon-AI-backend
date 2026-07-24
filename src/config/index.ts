@@ -19,6 +19,14 @@ export default {
   openai_embedding_model:
     process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small",
 
+  // Transactional email (generic SMTP)
+  smtp_host: process.env.SMTP_HOST,
+  smtp_port: Number(process.env.SMTP_PORT ?? "587"),
+  smtp_secure: process.env.SMTP_SECURE === "true",
+  smtp_user: process.env.SMTP_USER,
+  smtp_pass: process.env.SMTP_PASS,
+  smtp_from: process.env.SMTP_FROM,
+
   // Duplicate detection thresholds
   // Composite = text * w_text + category * w_cat + geo * w_geo + time * w_time
   duplicate_text_weight: Number(process.env.DUP_TEXT_WEIGHT ?? "0.55"),

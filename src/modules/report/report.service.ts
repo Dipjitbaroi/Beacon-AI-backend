@@ -22,6 +22,7 @@ import { generateEmbedding, cosineSimilarity } from "../../lib/embedding";
 import { haversineMeters, geoScore, timeScore } from "../../lib/severity";
 import { generateTrackingCode } from "../../utils/trackingCode";
 import { ApiError } from "../../utils/ApiError";
+import { isEmailAddress, sendReportCreatedEmail } from "../../lib/email";
 import config from "../../config";
 import {
   ICreateProgressUpdate,
@@ -224,6 +225,15 @@ const createReport = async (payload: ICreateReport) => {
   });
 
   const { embedding: _emb, ...safeReport } = report;
+  if (isEmailAddress(contact)) {
+    await sendReportCreatedEmail({
+      to: contact,
+      citizenName,
+      reportId: report.id,
+      trackingCode: report.trackingCode,
+      summary: report.summary,
+    });
+  }
   return safeReport;
 };
 

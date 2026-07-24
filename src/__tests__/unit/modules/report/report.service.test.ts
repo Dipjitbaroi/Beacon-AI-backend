@@ -53,6 +53,11 @@ vi.mock("../../../../lib/embedding", () => ({
   cosineSimilarity: vi.fn(),
 }));
 
+vi.mock("../../../../lib/email", () => ({
+  isEmailAddress: vi.fn((value?: string | null) => Boolean(value?.includes("@"))),
+  sendReportCreatedEmail: vi.fn().mockResolvedValue(true),
+}));
+
 vi.mock("../../../../config", () => ({
   default: {
     duplicate_radius_m: 500,
@@ -180,6 +185,48 @@ describe("reportService", () => {
       expect(runTriage).toHaveBeenCalledWith(expect.objectContaining({
         imageUrls: ["https://cdn.example.com/pothole.jpg"],
       }));
+    });
+
+    it("emails the report ID and tracking code after creation", async () => {
+      const { sendReportCreatedEmail } = await import("../../../../lib/email");
+      mockFindMany.mockResolvedValue([]);
+      mockCreate.mockResolvedValue({
+        id: "report-email-1",
+        trackingCode: "CIV-EMAIL1",
+        summary: "Large pothole near a school",
+        embedding: [],
+      } as any);
+
+      await reportService.createReport({
+        ...basePayload,
+        citizenName: "Ayesha Rahman",
+        contact: "ayesha@example.com",
+      });
+
+      expect(sendReportCreatedEmail).toHaveBeenCalledWith({
+        to: "ayesha@example.com",
+        citizenName: "Ayesha Rahman",
+        reportId: "report-email-1",
+        trackingCode: "CIV-EMAIL1",
+        summary: "Large pothole near a school",
+      });
+    });
+
+    it("does not send confirmation email for non-email contact values", async () => {
+      const { sendReportCreatedEmail } = await import("../../../../lib/email");
+      mockFindMany.mockResolvedValue([]);
+      mockCreate.mockResolvedValue({
+        id: "report-no-email",
+        trackingCode: "CIV-NOMAIL",
+        embedding: [],
+      } as any);
+
+      await reportService.createReport({
+        ...basePayload,
+        contact: "01700000000",
+      });
+
+      expect(sendReportCreatedEmail).not.toHaveBeenCalled();
     });
 
     it("links to a duplicate when score exceeds threshold", async () => {
