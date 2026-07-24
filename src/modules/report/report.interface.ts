@@ -52,3 +52,22 @@ export interface ICreateProgressUpdate {
 export interface ITrackFilters {
   includeInternal?: boolean;
 }
+
+/**
+ * Filters accepted by `GET /api/reports/stats/summary`.
+ *
+ * - `location`: case-insensitive substring match against `locationText`
+ *   and `normalizedLocation`. Lets admins slice stats by city / district /
+ *   street without exposing raw lat/lng.
+ * - `startDate` / `endDate`: ISO-8601 timestamps that bound the range
+ *   applied to the chosen `dateField`.
+ * - `dateField`: which timestamp the date range filters against.
+ *   `createdAt` (default) counts report intake; `updatedAt` counts
+ *   recent activity (status changes, progress notes).
+ */
+export interface IStatsSummaryFilters {
+  location?: string;
+  startDate?: string;
+  endDate?: string;
+  dateField?: "createdAt" | "updatedAt";
+}

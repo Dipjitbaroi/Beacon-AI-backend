@@ -10,6 +10,7 @@ import {
   createReportValidationSchema,
   listReportsQueryValidationSchema,
   reportIdParamsValidationSchema,
+  statsSummaryQueryValidationSchema,
   trackReportParamsValidationSchema,
   updateReportStatusValidationSchema,
 } from "./report.validation";
@@ -21,15 +22,62 @@ const router = Router();
  * /api/reports/stats/summary:
  *   get:
  *     summary: Aggregated dashboard metrics (admin)
+ *     description: |
+ *       Returns totals, breakdowns, and a 7-day time series. All counts
+ *       and breakdowns share the same filter so the totals always agree
+ *       with the breakdown sums.
+ *
+ *       Filters (all optional):
+ *         - `location`: case-insensitive substring match against
+ *           `locationText` and `normalizedLocation` (e.g. "Mirpur",
+ *           "Downtown", "23.45,90.12").
+ *         - `startDate` / `endDate`: ISO-8601 timestamps.
+ *         - `dateField`: which timestamp the date range is applied to
+ *           (`createdAt` default, or `updatedAt` for activity-based
+ *           dashboards).
  *     tags: [Reports]
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: location
+ *         schema: { type: string, minLength: 1, maxLength: 200 }
+ *         description: Case-insensitive substring match against `locationText`.
+ *       - in: query
+ *         name: startDate
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: endDate
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateField
+ *         schema:
+ *           type: string
+ *           enum: [createdAt, updatedAt]
+ *           default: createdAt
  *     responses:
- *       200: { description: OK }
- *       401: { description: Unauthorized }
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/StatsSummaryResponse"
+ *       400:
+ *         description: Validation error (invalid date, unknown dateField, etc.)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/ErrorResponse"
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/ErrorResponse"
  */
 router.get(
   "/stats/summary",
   auth(Role.admin),
+  validateRequest(statsSummaryQueryValidationSchema),
   reportController.getStatsSummary,
 );
 
@@ -49,8 +97,42 @@ router.get(
  *         name: includeInternal
  *         schema: { type: boolean, default: false }
  *     responses:
- *       200: { description: OK }
- *       404: { description: Not found }
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/TrackReportResponse"
+ *             example:
+ *               success: true
+ *               statusCode: 200
+ *               message: "Tracking info retrieved"
+ *               data:
+ *                 trackingCode: "CIV-3K9P7X"
+ *                 category: "pothole"
+ *                 summary: "Large pothole near Mirpur-10 bus stop."
+ *                 severity:
+ *                   level: "high"
+ *                   score: 0.74
+ *                   rationale: "Vehicle hazard in active traffic lane."
+ *                 status: "under_review"
+ *                 department: "roads_and_highways"
+ *                 language: "en"
+ *                 images:
+ *                   - "https://res.cloudinary.com/dqxroal4k/image/upload/v1/civic-reports/CIV-3K9P7X/0.jpg"
+ *                 createdAt: "2026-07-22T10:30:00.000Z"
+ *                 progress:
+ *                   - id: "a1b2c3d4-..."
+ *                     status: "pending"
+ *                     note: "Report received"
+ *                     visibility: "public"
+ *                     createdAt: "2026-07-22T10:30:00.000Z"
+ *       404:
+ *         description: Not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/ErrorResponse"
  */
 router.get(
   "/track/:trackingCode",
@@ -94,9 +176,36 @@ router.get(
  *                 type: string
  *                 enum: [pothole, broken_streetlight, water_leak, illegal_dumping, other]
  *     responses:
- *       201: { description: Created }
- *       400: { description: Validation error }
- *       429: { description: Too many submissions }
+ *       201:
+ *         description: Created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/CreateReportResponse"
+ *             example:
+ *               success: true
+ *               statusCode: 201
+ *               message: "Report submitted successfully"
+ *               data:
+ *                 id: "8d2e4f12-3a4b-4c1d-9e0f-7b8a9c0d1e2f"
+ *                 trackingCode: "CIV-3K9P7X"
+ *                 category: "pothole"
+ *                 severityLevel: "high"
+ *                 severityScore: 0.74
+ *                 status: "pending"
+ *                 suggestedDepartment: "roads_and_highways"
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/ErrorResponse"
+ *       429:
+ *         description: Too many submissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/ErrorResponse"
  */
 router.post(
   "/",
@@ -147,8 +256,35 @@ router.post(
  *         name: sortOrder
  *         schema: { type: string, enum: [asc, desc], default: desc }
  *     responses:
- *       200: { description: OK }
- *       401: { description: Unauthorized }
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/PaginatedReportsResponse"
+ *             example:
+ *               success: true
+ *               statusCode: 200
+ *               message: "Reports retrieved successfully"
+ *               meta:
+ *                 page: 1
+ *                 limit: 10
+ *                 total: 45
+ *                 totalPages: 5
+ *               data:
+ *                 - id: "8d2e4f12-3a4b-4c1d-9e0f-7b8a9c0d1e2f"
+ *                   trackingCode: "CIV-3K9P7X"
+ *                   category: "pothole"
+ *                   severityLevel: "high"
+ *                   severityScore: 0.74
+ *                   status: "pending"
+ *                   createdAt: "2026-07-22T10:30:00.000Z"
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/ErrorResponse"
  */
 router.get(
   "/",
@@ -170,8 +306,38 @@ router.get(
  *         required: true
  *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: OK }
- *       404: { description: Not found }
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/SingleReportResponse"
+ *             example:
+ *               success: true
+ *               statusCode: 200
+ *               message: "Report retrieved successfully"
+ *               data:
+ *                 id: "8d2e4f12-3a4b-4c1d-9e0f-7b8a9c0d1e2f"
+ *                 trackingCode: "CIV-3K9P7X"
+ *                 category: "pothole"
+ *                 severityLevel: "high"
+ *                 severityScore: 0.74
+ *                 severityRationale: "Vehicle hazard in active traffic lane."
+ *                 status: "pending"
+ *                 assignedDepartment: null
+ *                 progressUpdates:
+ *                   - id: "a1b2c3d4-..."
+ *                     status: "pending"
+ *                     note: "Report received"
+ *                     visibility: "public"
+ *                     createdAt: "2026-07-22T10:30:00.000Z"
+ *                 duplicateChildren: []
+ *       404:
+ *         description: Not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/ErrorResponse"
  */
 router.get(
   "/:id",
@@ -209,7 +375,18 @@ router.get(
  *                 enum: [public, internal]
  *                 default: public
  *     responses:
- *       200: { description: OK }
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/SingleReportResponse"
+ *       400:
+ *         description: Validation error or invalid transition
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/ErrorResponse"
  */
 router.patch(
   "/:id/status",
@@ -244,7 +421,18 @@ router.patch(
  *                 enum: [roads_and_highways, electrical, water_and_sewerage, waste_management, general]
  *               note: { type: string, maxLength: 1000 }
  *     responses:
- *       200: { description: OK }
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/SingleReportResponse"
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/ErrorResponse"
  */
 router.patch(
   "/:id/assign",
@@ -283,7 +471,27 @@ router.patch(
  *                 enum: [public, internal]
  *                 default: public
  *     responses:
- *       201: { description: Created }
+ *       201:
+ *         description: Created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/AddProgressUpdateResponse"
+ *             example:
+ *               success: true
+ *               statusCode: 201
+ *               message: "Progress update added"
+ *               data:
+ *                 report:
+ *                   id: "8d2e4f12-3a4b-4c1d-9e0f-7b8a9c0d1e2f"
+ *                   status: "in_progress"
+ *                   updatedAt: "2026-07-22T11:00:00.000Z"
+ *                 progress:
+ *                   id: "b9c8d7e6-0000-0000-0000-000000000000"
+ *                   status: "in_progress"
+ *                   note: "Crew dispatched."
+ *                   visibility: "public"
+ *                   createdAt: "2026-07-22T11:00:00.000Z"
  */
 router.post(
   "/:id/progress",
@@ -308,8 +516,43 @@ router.post(
  *         required: true
  *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: OK }
- *       404: { description: Not found }
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/DuplicatesResponse"
+ *             example:
+ *               success: true
+ *               statusCode: 200
+ *               message: "Duplicate report chain retrieved"
+ *               data:
+ *                 parent:
+ *                   id: "8d2e4f12-3a4b-4c1d-9e0f-7b8a9c0d1e2f"
+ *                   trackingCode: "CIV-3K9P7X"
+ *                   category: "pothole"
+ *                   severityLevel: "high"
+ *                   severityScore: 0.74
+ *                   status: "pending"
+ *                   duplicateScore: null
+ *                   createdAt: "2026-07-22T10:30:00.000Z"
+ *                   duplicateOfId: null
+ *                 children:
+ *                   - id: "1a2b3c4d-..."
+ *                     trackingCode: "CIV-9JK2LM"
+ *                     category: "pothole"
+ *                     severityLevel: "medium"
+ *                     severityScore: 0.55
+ *                     status: "pending"
+ *                     duplicateScore: 0.88
+ *                     createdAt: "2026-07-22T10:35:00.000Z"
+ *                     duplicateOfId: "8d2e4f12-3a4b-4c1d-9e0f-7b8a9c0d1e2f"
+ *       404:
+ *         description: Not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/ErrorResponse"
  */
 router.get(
   "/:id/duplicates",
@@ -331,8 +574,32 @@ router.get(
  *         required: true
  *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: OK }
- *       404: { description: Not found }
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/DeleteReportResponse"
+ *             example:
+ *               success: true
+ *               statusCode: 200
+ *               message: "Report archived (soft-deleted) successfully"
+ *               data:
+ *                 report:
+ *                   id: "8d2e4f12-3a4b-4c1d-9e0f-7b8a9c0d1e2f"
+ *                   status: "rejected"
+ *                 progress:
+ *                   id: "c0c0c0c0-0000-0000-0000-000000000000"
+ *                   status: "rejected"
+ *                   note: "Report deleted by admin."
+ *                   visibility: "internal"
+ *                   createdAt: "2026-07-22T12:00:00.000Z"
+ *       404:
+ *         description: Not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/ErrorResponse"
  */
 router.delete(
   "/:id",

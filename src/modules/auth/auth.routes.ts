@@ -24,7 +24,7 @@ const router = Router();
  *               name: { type: string, example: "Dipjit Baroi" }
  *               email: { type: string, format: email, example: "admin@crisisdesk.ai" }
  *               password: { type: string, minLength: 6, example: "supersecret123" }
- *               role: { type: string, enum: [user, admin], example: admin }
+ *               role: { type: string, enum: ["user", "admin"], example: "admin" }
  *     responses:
  *       201:
  *         description: Created
@@ -118,7 +118,7 @@ router.post("/register", validateRequest(registerValidationSchema), authControll
  *             example:
  *               success: false
  *               statusCode: 401
- *               message: "Invalid credentials."
+ *               message: "Invalid email or password."
  *       429:
  *         description: Too many login attempts
  *         content:

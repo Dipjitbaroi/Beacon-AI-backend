@@ -153,8 +153,13 @@ const deleteReport = catchAsync(
 );
 
 const getStatsSummary = catchAsync(
-  async (_req: Request, res: Response, _next: NextFunction) => {
-    const stats = await reportService.getStatsSummary();
+  async (req: Request, res: Response, _next: NextFunction) => {
+    const stats = await reportService.getStatsSummary({
+      location: req.query.location as string | undefined,
+      startDate: req.query.startDate as string | undefined,
+      endDate: req.query.endDate as string | undefined,
+      dateField: req.query.dateField as "createdAt" | "updatedAt" | undefined,
+    });
 
     sendResponse(res, {
       success: true,

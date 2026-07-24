@@ -111,3 +111,14 @@ export const listReportsQueryValidationSchema = z.object({
     sortOrder: z.enum(["asc", "desc"]).default("desc"),
   }),
 });
+
+export const statsSummaryQueryValidationSchema = z.object({
+  query: z.object({
+    // Free-text location filter (e.g. "Mirpur", "Downtown", "23.45,90.12").
+    // Matches case-insensitively against `locationText` / `normalizedLocation`.
+    location: z.string().trim().min(1).max(200).optional(),
+    startDate: z.string().datetime().optional(),
+    endDate: z.string().datetime().optional(),
+    dateField: z.enum(["createdAt", "updatedAt"]).default("createdAt"),
+  }),
+});

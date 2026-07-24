@@ -27,6 +27,7 @@ import {
   ICreateProgressUpdate,
   ICreateReport,
   IReportFilters,
+  IStatsSummaryFilters,
 } from "./report.interface";
 
 const MAX_TRACKING_CODE_ATTEMPTS = 5;
@@ -572,7 +573,33 @@ const getReportDuplicates = async (id: string) => {
   };
 };
 
-const getStatsSummary = async () => {
+const getStatsSummary = async (filters: IStatsSummaryFilters = {}) => {
+  const {
+    location,
+    startDate,
+    endDate,
+    dateField = "createdAt",
+  } = filters;
+
+  // Build the shared base WHERE clause. Every count / groupBy / findMany
+  // below starts from this so the breakdown numbers always agree with the
+  // top-level totals.
+  const baseWhere: Prisma.ReportWhereInput = {};
+
+  if (location && location.length > 0) {
+    baseWhere.OR = [
+      { locationText: { contains: location, mode: "insensitive" } },
+      { normalizedLocation: { contains: location, mode: "insensitive" } },
+    ];
+  }
+
+  if (startDate || endDate) {
+    const dateRange: Prisma.DateTimeFilter = {};
+    if (startDate) dateRange.gte = new Date(startDate);
+    if (endDate) dateRange.lte = new Date(endDate);
+    baseWhere[dateField] = dateRange;
+  }
+
   const [
     totalReports,
     pendingReports,
@@ -588,52 +615,78 @@ const getStatsSummary = async () => {
     byDepartment,
     resolvedForAvg,
   ] = await Promise.all([
-    prisma.report.count(),
-    prisma.report.count({ where: { status: "pending" } }),
-    prisma.report.count({ where: { status: "under_review" } }),
-    prisma.report.count({ where: { status: "assigned" } }),
-    prisma.report.count({ where: { status: "in_progress" } }),
-    prisma.report.count({ where: { status: "resolved" } }),
-    prisma.report.count({ where: { status: "rejected" } }),
-    prisma.report.count({ where: { severityLevel: "critical" } }),
-    prisma.report.count({ where: { duplicateOfId: { not: null } } }),
+    prisma.report.count({ where: baseWhere }),
+    prisma.report.count({ where: { ...baseWhere, status: "pending" } }),
+    prisma.report.count({ where: { ...baseWhere, status: "under_review" } }),
+    prisma.report.count({ where: { ...baseWhere, status: "assigned" } }),
+    prisma.report.count({ where: { ...baseWhere, status: "in_progress" } }),
+    prisma.report.count({ where: { ...baseWhere, status: "resolved" } }),
+    prisma.report.count({ where: { ...baseWhere, status: "rejected" } }),
+    prisma.report.count({ where: { ...baseWhere, severityLevel: "critical" } }),
+    prisma.report.count({ where: { ...baseWhere, duplicateOfId: { not: null } } }),
     prisma.report.groupBy({
       by: ["category"],
+      where: baseWhere,
       _count: { _all: true },
     }),
     prisma.report.groupBy({
       by: ["severityLevel"],
+      where: baseWhere,
       _count: { _all: true },
     }),
     prisma.report.groupBy({
       by: ["assignedDepartment"],
+      where: baseWhere,
       _count: { _all: true },
     }),
     // Average resolution time (createdAt -> updatedAt on resolved reports)
     prisma.report.findMany({
-      where: { status: "resolved" },
+      where: { ...baseWhere, status: "resolved" },
       select: { createdAt: true, updatedAt: true },
     }),
   ]);
 
-  // Build last-7-days time series
+  // Build last-7-days time series. The series is always bucketed by
+  // calendar day in UTC; the date range filter narrows the window only
+  // if the user explicitly supplies startDate / endDate, otherwise we
+  // show the trailing 7 days.
   const last7Days: { date: string; count: number }[] = [];
   const now = new Date();
+  // If the caller supplied an endDate, anchor the trailing window to
+  // that day; otherwise anchor to "today".
+  const windowEnd = endDate ? new Date(endDate) : now;
+  windowEnd.setUTCHours(23, 59, 59, 999);
+
   for (let i = 6; i >= 0; i--) {
-    const day = new Date(now);
+    const day = new Date(windowEnd);
     day.setUTCHours(0, 0, 0, 0);
     day.setUTCDate(day.getUTCDate() - i);
     const next = new Date(day);
     next.setUTCDate(next.getUTCDate() + 1);
+
+    const dayWhere: Prisma.ReportWhereInput = { ...baseWhere };
+    // For the time-series bucket we always count by createdAt, even if
+    // the user picked dateField=updatedAt for the rest of the stats,
+    // because "reports per day" semantically means intake volume.
+    const dayCountWhere: Prisma.ReportWhereInput = {
+      ...baseWhere,
+      createdAt: {
+        gte: day,
+        lt: next,
+      },
+    };
+
+    // If the caller supplied a startDate, skip days before it.
+    if (startDate && day < new Date(startDate)) {
+      last7Days.push({ date: day.toISOString().slice(0, 10), count: 0 });
+      continue;
+    }
+
+    const c = await prisma.report.count({ where: dayCountWhere });
     last7Days.push({
       date: day.toISOString().slice(0, 10),
-      count: 0,
+      count: c,
     });
-    // count reports created on this day
-    const c = await prisma.report.count({
-      where: { createdAt: { gte: day, lt: next } },
-    });
-    last7Days[last7Days.length - 1]!.count = c;
   }
 
   // Average resolution time in hours
@@ -684,6 +737,12 @@ const getStatsSummary = async () => {
     averageResolutionTimeHours,
     last7Days,
     duplicatesLinked,
+    appliedFilters: {
+      location: location ?? null,
+      startDate: startDate ?? null,
+      endDate: endDate ?? null,
+      dateField,
+    },
   };
 };
 
