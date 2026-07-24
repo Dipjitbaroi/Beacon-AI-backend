@@ -1,0 +1,55 @@
+model Report {
+  id                 String          @id @default(uuid())
+  trackingCode       String          @unique
+  citizenName        String?         @db.VarChar(255)
+  contact            String?         @db.VarChar(255)
+  description        String
+  locationText       String
+  latitude           Float?
+  longitude          Float?
+  category           ReportCategory
+  aiCategory         ReportCategory?
+  severityLevel      SeverityLevel?
+  severityScore      Float?
+  severityRationale  String?
+  summary            String?
+  canonicalSummary   String?
+  normalizedLocation String?
+  language           Language        @default(unknown)
+  aiConfidence       Float?
+  embedding          Float[]
+  imageUrls          String[]
+  status             ReportStatus    @default(pending)
+  assignedDepartment Department?
+  duplicateOfId      String?
+  duplicateScore     Float?
+  suggestedAction    String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  progressUpdates   ProgressUpdate[]
+  duplicateChildren Report[]         @relation("DuplicateLink")
+  duplicateParent   Report?          @relation("DuplicateLink", fields: [duplicateOfId], references: [id])
+
+  @@index([status, severityLevel])
+  @@index([category])
+  @@index([assignedDepartment])
+  @@index([createdAt])
+  @@index([trackingCode])
+  @@map("reports")
+}
+
+model ProgressUpdate {
+  id          String             @id @default(uuid())
+  reportId    String
+  report      Report             @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  status      ReportStatus
+  note        String?
+  visibility  ProgressVisibility @default(public)
+  updatedById String?
+  updatedBy   User?              @relation(fields: [updatedById], references: [id])
+  createdAt   DateTime           @default(now())
+
+  @@index([reportId, createdAt])
+  @@map("progress_updates")
+}

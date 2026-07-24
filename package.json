@@ -1,0 +1,62 @@
+{
+  "name": "crisis-desk-backend",
+  "version": "1.0.0",
+  "description": "",
+  "homepage": "https://github.com/AbulBashar38/crisis-desk-backend#readme",
+  "bugs": {
+    "url": "https://github.com/AbulBashar38/crisis-desk-backend/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AbulBashar38/crisis-desk-backend.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node --import tsx src/server.ts",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/combined-stream": "^1.0.6",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^26.1.1",
+    "@types/pg": "^8.20.0",
+    "@types/supertest": "^7.2.0",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
+    "combined-stream": "^1.0.8",
+    "prisma": "^7.8.0",
+    "supertest": "^7.2.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.5.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "http-status": "^2.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^1.4.5-lts.1",
+    "nanoid": "^5.0.9",
+    "openai": "^4.73.0",
+    "pg": "^8.22.0",
+    "swagger-jsdoc": "^6.3.0",
+    "swagger-ui-express": "^5.0.1",
+    "tsx": "^4.23.1",
+    "zod": "^3.24.4"
+  }
+}

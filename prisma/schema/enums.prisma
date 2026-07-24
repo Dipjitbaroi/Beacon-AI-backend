@@ -1,0 +1,47 @@
+enum Role {
+  user
+  admin
+}
+
+enum Language {
+  bn
+  en
+  unknown
+}
+
+enum ReportCategory {
+  pothole
+  broken_streetlight
+  water_leak
+  illegal_dumping
+  other
+}
+
+enum SeverityLevel {
+  low
+  medium
+  high
+  critical
+}
+
+enum ReportStatus {
+  pending
+  under_review
+  assigned
+  in_progress
+  resolved
+  rejected
+}
+
+enum Department {
+  roads_and_highways
+  electrical
+  water_and_sewerage
+  waste_management
+  general
+}
+
+enum ProgressVisibility {
+  public
+  internal
+}
